@@ -80,7 +80,6 @@ def start():
          finish_label.grid(column=1, row=4, sticky=tk.W, padx=5, pady=5)
 
 
-# Create a Button
   
 # Show image using label
 style = ttk.Style()
