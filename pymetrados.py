@@ -1,120 +1,108 @@
-# Import the required Libraries
-from distutils.command.config import config
-from mimetypes import init
-from tkinter import *
 import tkinter as tk
-from tkinter import ttk, filedialog
-import scrip_metrados
-from tkinter.filedialog import askopenfile
-import os
+from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
+import os
+import scrip_metrados
 import sys
+from mixpanel import Mixpanel
+
+# Crea una instancia de Mixpanel con tu token de proyecto
+mp = Mixpanel('3f89c70f58f582dfc898380a1699e843')
+
+# Rastrea un evento con un nombre y propiedades
+mp.track('distinct_id', 'Start Session', {'Property Name': 'Pymetrados'})
 
 # Create an instance of tkinter frame
-win = Tk()
+win = tk.Tk()
 
-# Set the geometry of tkinter frame
-win.geometry("650x450")
-win.title('PÿMetrados')
-win.resizable(0,0)
+# Set the title and geometry, and prevent resizing
+win.title('PyMetrados')
+win.geometry("750x550")
+win.resizable(0, 0)
+win.columnconfigure(0, weight=1)
+win.columnconfigure(4, weight=1)
+# Set the style for the widgets
+style = ttk.Style()
+style.theme_use('clam')
+style.configure('TButton', font=('Arial', 12), borderwidth=1)
+style.configure('TLabel', font=('Arial', 12), foreground='#0F1FFF')
+style.configure('Header.TLabel', font=('Arial', 18, 'bold'))
+
+
+# Load an image for the background
 bundle_dir = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(__file__)))
 path_to_yml = os.path.abspath(os.path.join(bundle_dir, 'cover.jpg'))
-image = Image.open(path_to_yml)
-# jewimage = image.resize((650,450), Image.ANTIALIAS)
-# jewimage.save("cover.jpg")
-width, height = win.winfo_screenwidth(), win.winfo_screenheight()
 
-image = ImageTk.PhotoImage(image)
-bg_label = ttk.Label(win, image = image)
+bg_image = Image.open(path_to_yml)
+bg_photo = ImageTk.PhotoImage(bg_image.resize((750, 550), Image.ANTIALIAS))
+bg_label = tk.Label(win, image=bg_photo)
 bg_label.place(x=0, y=0, relwidth=1, relheight=1)
 
+# Global paths
 db_path = ""
 planilla_path = ""
 save_path = ""
 
+# Define functions for opening files and directories
 def open_db():
-   file = filedialog.askopenfilename(filetypes=[("Configuration","*.xlsx")])
-   if file:
-      filepath = os.path.abspath(file)
-      global db_path
-      db_path =  filepath
-      open_label = ttk.Label(win, text="La configuración esta en: " + str(filepath), background='black', foreground='#00FFFF', font=('Aerial 8'))
-      open_label.grid(column=1, row=1, sticky=tk.W, padx=5, pady=5)
+    global db_path
+    db_path = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx")])
+    if db_path:
+        db_label.config(text=f"Config File: {os.path.basename(db_path)}")
+
 def open_planilla():
-   file = filedialog.askopenfilename(filetypes=[("Planilla","*.xlsx")])
-   if file:
-      filepath = os.path.abspath(file)
-      global planilla_path
-      planilla_path = filepath
-      planilla_label = ttk.Label(win, text="La planilla esta en: " + str(filepath), background='black', foreground='#00FFFF', font=('Aerial 8'))
-      planilla_label.grid(column=1, row=2, sticky=tk.W, padx=5, pady=5)
+    global planilla_path
+    planilla_path = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx")])
+    if planilla_path:
+        planilla_label.config(text=f"Planilla File: {os.path.basename(planilla_path)}")
 
 def save_file():
-   file = filedialog.askdirectory()
-   if file:
-      filepath = os.path.abspath(file)
-      global save_path
-      save_path =  filepath
-      save_label = ttk.Label(win, text="Exportar en : " + str(filepath), background='black', foreground='#00FFFF', font=('Aerial 8'))
-      save_label.grid(column=1, row=3, sticky=tk.W, padx=5, pady=5)
-# Add a Label widget
-
+    global save_path
+    save_path = filedialog.askdirectory()
+    if save_path:
+        save_label.config(text=f"Save Location: {save_path}")
 
 
 def start():
-   text = tk.StringVar()
-   finish_label =  Label(win, textvariable=text, background='black', foreground='#FF0000', font=('Aerial 12'))
+    # Check if all paths are defined
+    if not all([db_path, planilla_path, save_path]):
+        messagebox.showerror("Error", "Please select all files and the save location before starting.")
+        return
+    # Execute the main script
+    result = scrip_metrados.metados_py(planilla_path, db_path, save_path)
+    if result is True:
+        messagebox.showinfo("Success", "Metrado.xlsx has been generated successfully.")
+    else:
+        messagebox.showerror("Error", result)
 
-   if db_path and planilla_path and save_path:
-      finish = scrip_metrados.metados_py(planilla_path, db_path, save_path)
+# Add header label
+header_label = ttk.Label(win, text="PYMETRADOS", style='Header.TLabel')
+header_label.grid(row=1, column=1, columnspan=2, pady=20)
 
-      if finish:
-         text.set("Se genero Metrado.xlsx, Tarea Finalizada")
-         finish_label.grid(column=1, row=4, sticky=tk.W, padx=5, pady=5)
-   else:
-      if db_path:
-         text.set("Debe de seleccionar la ubicacion de la planilla")
-         finish_label.grid(column=1, row=4, sticky=tk.W, padx=5, pady=5)
-      else:
-         text.set("Debe de seleccionar la base de datos")
-         finish_label.grid(column=1, row=4, sticky=tk.W, padx=5, pady=5)
+# Add labels for file paths
+db_label = ttk.Label(win, text="No Config File Selected", style='TLabel')
+planilla_label = ttk.Label(win, text="No Planilla File Selected", style='TLabel')
+save_label = ttk.Label(win, text="No Save Location Selected", style='TLabel')
 
 
-  
-# Show image using label
-style = ttk.Style()
-style.theme_use('alt')
-win.columnconfigure(0, weight=1)
-win.columnconfigure(1, weight=3)
-title =  Label(win, text="PYMETRADOS", background='black', foreground='#00FFFF', font=('Aerial 15'))
-title.grid(columnspan=2, row=0, padx=5, pady=20)
-footer =  Label(win, text="Desarrollado por: www.angelhuayas.com", background='black', foreground='#00FFFF', font=('Aerial 8'))
-footer.grid(columnspan=2, row=5, padx=5, pady=20)
-style.configure('TButton', background = '#00FFFF', foreground = 'black', width = 20, borderwidth=1, focusthickness=3, focuscolor='none')
-style.map('TButton', background=[('active','black')], foreground = [('active','white')] )
+db_label.place(relx=0.75, rely=0.3, anchor='center')
+planilla_label.place(relx=0.75, rely=0.4, anchor='center')
+save_label.place(relx=0.75, rely=0.5, anchor='center')
 
-config_button = ttk.Button(win, text="Cargar config", command=open_db, style='Fun.TButton')
-planilla_button = ttk.Button(win, text="Cargar planilla", command=open_planilla)
-save_button = ttk.Button(win, text="Guardar en:", command=save_file)
+# Add buttons for file dialogs
+config_button = ttk.Button(win, text="Load Config", command=open_db)
+planilla_button = ttk.Button(win, text="Load Planilla", command=open_planilla)
+save_button = ttk.Button(win, text="Save to", command=save_file)
 start_button = ttk.Button(win, text="Start", command=start)
-combo = Text(win, height=8)
 
+config_button.place(relx=0.25, rely=0.3, anchor='center')
+planilla_button.place(relx=0.25, rely=0.4, anchor='center')
+save_button.place(relx=0.25, rely=0.5, anchor='center')
+start_button.place(relx=0.25, rely=0.6, anchor='center')
 
-config_button.grid(column=0, row=1, padx=5, pady=20)
-planilla_button.grid(column=0, row=2, padx=5, pady=20)
+# Add footer label
+footer_label = ttk.Label(win, text="Developed by: www.angelhuayas.com", style='TLabel')
+footer_label.place(relx=0.5, rely=0.9, anchor='center')
 
-save_button.grid(column=0, row=3, padx=5, pady=20)
-
-start_button.grid(column=0, row=4, padx=5, pady=20)
-
-class Frame():
-   def __init__(self):
-      self = self
-   def show_frame(self,win):
-      win.mainloop()
-
-if __name__ == "__main__":
-   app = Frame()
-   app.show_frame(win)     
-
-
+# Start the GUI event loop
+win.mainloop()
