@@ -3,6 +3,8 @@ from numpy import count_nonzero
 import openpyxl as xl
 from openpyxl import load_workbook
 from win32com.client import Dispatch
+import re
+
 
 def change_function(arg):
         return arg.value
@@ -18,15 +20,17 @@ def sort_func(arg):
     return arg['id']
 
 def get_uniques_values(data):
-    count_data = list(map(change_function,data))
+    count_data = list(map(change_function, data))
     new_set = set(count_data)
-    new_set.remove(None)
+    if None in new_set:
+        new_set.remove(None)
     new_array = []
     for i in new_set:
         if i != "Id":
-            new_array.append( {"id": i, "size" : len(list(filter(lambda x: x == i, count_data))) })  
-
-    return new_array
+            new_array.append({"id": i, "size": len(list(filter(lambda x: x == i, count_data)))})
+    sorted_array = sorted(new_array, key=lambda x: x['id'])
+    
+    return sorted_array
 
 def metados_py(planilla,db,export):
     error_message = None
@@ -61,29 +65,29 @@ def metados_py(planilla,db,export):
         range_ids = data['A':'A']
         data_general = data_base_workbook["General"]
         configuracion = data_base_workbook["Configuracion"]
-
         range_dates = data_general["A2:E"+str(data_general.max_row)]
         dic_data = {}
         # Intenta ejecutar el bloque de código que podría fallar
             # Intenta ejecutar el bloque de código que podría fallar
         range_dates_general = list(map(lambda x: {"id": x[0].value, "name": x[1].value, "code": x[2].value, "system": x[3].value, "location": x[4].value}, list(range_dates)))
         dic_data = {data['id']: data for data in range_dates_general}
-
         # Captura cualquier excepción y almacena el mensaje de error en la variable
    
-        range_headers = data_headers['A1':'BZ1'][0]
+       
 
         name_location = configuracion['B2'].value
         id_location = configuracion['B3'].value
         system_location = configuracion['B4'].value
         ubication_location = configuracion['B5'].value
         first_row_planilla = configuracion['B6'].value
+        match = re.match(r"([a-zA-Z]+)([0-9]+)", first_row_planilla)
+        first_number_row_planilla = match.group(2)
         length_elements = configuracion['B7'].value
         first_row_montaje = configuracion['B8'].value
         first_value_montaje = configuracion['B9'].value
-
+        range_rows_planilla = configuracion['B10'].value
+        range_headers = data_headers['A1':range_rows_planilla][0]
         projects_ids = get_uniques_values(range_ids)
-
         count_headers = len(get_uniques_values(range_headers))
         acum = 0
         for item in projects_ids:
@@ -115,8 +119,8 @@ def metados_py(planilla,db,export):
             montaje_data.Range(f"A{first_row_montaje}").Value = data_project['id']
             montaje_data.Range(f"C{first_row_montaje}").Value = data_project['name']
             try:
-                montaje_data.Range(montaje_data.Cells(1,9),montaje_data.Cells(count_headers,item['size']+9)).FormulaArray = "=TRANSPOSE(" +"P_"+str(item['id']) + "!R[14]C[-7]:R[" + str(14+item['size']) + "]C["+ str(count_headers-6) + "])"
-                montaje_data.Range(montaje_data.Cells(49,9), montaje_data.Cells(1000,9)).AutoFill(montaje_data.Range(montaje_data.Cells(49,9), montaje_data.Cells(1000,8+item['size'])), 0 )
+                montaje_data.Range(montaje_data.Cells(1,9),montaje_data.Cells(count_headers,item['size']+9)).FormulaArray = "=TRANSPOSE(" +"P_"+str(item['id']) + "!R["+ str(int(first_number_row_planilla) - 1) +"]C[-7]:R[" + str(14+item['size']) + "]C["+ str(count_headers-6) + "])"
+                montaje_data.Range(montaje_data.Cells(first_row_montaje,9), montaje_data.Cells(1000,9)).AutoFill(montaje_data.Range(montaje_data.Cells(first_row_montaje,9), montaje_data.Cells(1000,8+item['size'])), 0 )
             except Exception as e:
                 error_message = "Error: La versión de Excel no esta en Ingles. Por favor, cambie la configuración regional de Excel a inglés"
                 return error_message
@@ -137,7 +141,6 @@ def metados_py(planilla,db,export):
         resumen_planilla.Range(resumen_planilla.Cells(int(first_row_montaje)+2,9), resumen_planilla.Cells(int(first_row_montaje)+4,8 + len(range_dates_general))).PasteSpecial(Paste=-4122)
         resumen_planilla.Range(f"A1:A{int(first_row_montaje)-2}").EntireRow.Delete()
         xl.DisplayAlerts = False
-
         dummy_sheet = result_workbook.Worksheets("Sheet1")
         dummy_sheet.Delete()
         bd_workbook.Close(SaveChanges=False)

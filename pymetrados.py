@@ -34,7 +34,7 @@ bundle_dir = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(__file__))
 path_to_yml = os.path.abspath(os.path.join(bundle_dir, 'cover.jpg'))
 
 bg_image = Image.open(path_to_yml)
-bg_photo = ImageTk.PhotoImage(bg_image.resize((750, 550), Image.ANTIALIAS))
+bg_photo = ImageTk.PhotoImage(bg_image.resize((750, 550), Image.LANCZOS))
 bg_label = tk.Label(win, image=bg_photo)
 bg_label.place(x=0, y=0, relwidth=1, relheight=1)
 
