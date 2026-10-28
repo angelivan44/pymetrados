@@ -4,7 +4,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/angelivan44/pymetrados/internal/httpapi"
+	"github.com/angelivan44/pymetrados/httpapi"
 )
 
 func Generate(w http.ResponseWriter, r *http.Request) {

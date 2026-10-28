@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/angelivan44/pymetrados/internal/acceso"
+	"github.com/angelivan44/pymetrados/acceso"
 	"github.com/angelivan44/pymetrados/metrado"
 )
 

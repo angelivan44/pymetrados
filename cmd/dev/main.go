@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/angelivan44/pymetrados/internal/httpapi"
+	"github.com/angelivan44/pymetrados/httpapi"
 )
 
 func main() {

@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/angelivan44/pymetrados/internal/acceso"
+	"github.com/angelivan44/pymetrados/acceso"
 	"github.com/golang-jwt/jwt/v5"
 )
 

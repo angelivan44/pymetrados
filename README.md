@@ -101,8 +101,8 @@ gratuito (Hobby) es solo para uso no comercial.
 ```
 public/index.html       página única
 api/                    Vercel Functions (config.go, validate.go, generate.go)
-internal/httpapi/       handlers HTTP compartidos por Vercel y el servidor local
-internal/acceso/        verificación del JWT de Neon Auth (sesión de electroestudio.com)
+httpapi/                handlers HTTP compartidos por Vercel y el servidor local
+acceso/                 verificación del JWT de Neon Auth (sesión de electroestudio.com)
 metrado/
   inputs.go             lectura y validación de BD y planilla (mensajes para el usuario)
   generator.go          construcción de Metrado.xlsx (equivalente a la versión COM)
