@@ -30,3 +30,22 @@ func TestQuoteSheet(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteRowsFormula(t *testing.T) {
+	// Se borran las filas 1 a 8 de la hoja "R".
+	cases := map[string]string{
+		"SUM(I20:Z20)":       "SUM(I12:Z12)",
+		"I3+1":               "#REF!+1",
+		"SUM(I5:I20)":        "SUM(I1:I12)",
+		"$A$50*B$10":         "$A$42*B$2",
+		"R!A20+'R'!B9":       "R!A12+'R'!B1",
+		"M_8!G52+DATOS!J47":  "M_8!G52+DATOS!J47",
+		"SUM(A:A)+SUM(3:12)": "SUM(A:A)+SUM(1:4)",
+		`IF(A20="A20",1,0)`:  `IF(A12="A20",1,0)`,
+	}
+	for in, want := range cases {
+		if got := DeleteRowsFormula(in, "R", 1, 8); got != want {
+			t.Errorf("DeleteRowsFormula(%q) = %q, se esperaba %q", in, got, want)
+		}
+	}
+}

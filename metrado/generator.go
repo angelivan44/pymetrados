@@ -321,12 +321,9 @@ func (b *builder) buildResumen(built map[string]bool) (string, error) {
 		}
 	}
 
-	// Se quita la zona superior que en las M_ recibe los datos transpuestos.
-	for i := 0; i < fmr-2; i++ {
-		if err := b.f.RemoveRow(name, 1); err != nil {
-			return "", err
-		}
-	}
+	// La zona superior (filas 1..fmr-2), que en las M_ recibe los datos
+	// transpuestos, se quita al final en finalize: con RemoveRow de excelize
+	// era la parte más lenta de la generación.
 	return name, nil
 }
 
@@ -372,11 +369,11 @@ func Generate(in *Inputs) ([]byte, error) {
 		}
 	}
 
-	// Cada inserción o borrado de filas hace que excelize revise las fórmulas de
-	// todo el libro, así que las hojas que mueven filas se arman primero, con el
-	// libro aún pequeño: el Resumen (borra filas) y luego las P_ (insertan). Las
-	// M_ solo escriben celdas. Ninguna hoja hace referencia al Resumen ni a las
-	// M_ antes de existir, así que el resultado es el mismo.
+	// Cada inserción de filas hace que excelize revise las fórmulas de todo el
+	// libro, así que las P_ (que insertan filas) se arman antes que las M_, con
+	// el libro aún pequeño. Ninguna hoja hace referencia a las M_ antes de que
+	// existan, así que el resultado es el mismo. Las filas que el Resumen quita
+	// se borran al final, en finalize.
 	built := map[string]bool{}
 	for _, g := range in.Groups {
 		built[g.Project.Key] = true
@@ -421,7 +418,7 @@ func Generate(in *Inputs) ([]byte, error) {
 	for _, s := range generated {
 		created[s] = true
 	}
-	return finalize(buf.Bytes(), in.BD, created, removed)
+	return finalize(buf.Bytes(), in.BD, created, removed, map[string]int{resumen: in.Config.FirstRowMontaje - 2})
 }
 
 // moveToFront deja `order` al inicio del libro (el resto, después). MoveSheet de

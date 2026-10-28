@@ -38,13 +38,126 @@ func TranslateFormula(formula string, dRows, dCols int) string {
 	if dRows == 0 && dCols == 0 {
 		return formula
 	}
+	return rewriteRefs(formula, func(prefix, ref string) string {
+		return translateRef(prefix, ref, dRows, dCols)
+	})
+}
+
+// DeleteRowsFormula ajusta la fórmula de una celda de `sheet` como Excel al
+// borrar `n` filas desde la fila `at`: las referencias a la propia hoja que
+// apuntaban más abajo suben, las que apuntaban a filas borradas pasan a #REF!
+// y los rangos que las cruzaban se recortan.
+func DeleteRowsFormula(formula, sheet string, at, n int) string {
+	return rewriteRefs(formula, func(prefix, ref string) string {
+		if prefix != "" && unquoteSheet(strings.TrimSuffix(prefix, "!")) != sheet {
+			return prefix + ref
+		}
+		shifted, ok := DeleteRowsRef(ref, at, n)
+		if !ok {
+			return "#REF!"
+		}
+		return prefix + shifted
+	})
+}
+
+// DeleteRowsRef ajusta una referencia sin hoja ("A5", "$B$3:C9", "4:6") al
+// borrar n filas desde at. ok=false si la referencia queda entera dentro de
+// las filas borradas.
+func DeleteRowsRef(ref string, at, n int) (string, bool) {
+	end := at + n - 1
+	parts := strings.Split(ref, ":")
+	parsed := make([]refPartInfo, len(parts))
+	for i, part := range parts {
+		info, ok := parseRefPart(part)
+		if !ok {
+			return ref, true
+		}
+		parsed[i] = info
+	}
+	first, last := &parsed[0], &parsed[len(parsed)-1]
+	if first.row == 0 || last.row == 0 {
+		return ref, true // columnas completas: borrar filas no las cambia
+	}
+	if first.row >= at && last.row <= end {
+		return "", false
+	}
+	shift := func(r int) int {
+		if r > end {
+			return r - n
+		}
+		return r
+	}
+	r1, r2 := first.row, last.row
+	switch {
+	case r1 >= at && r1 <= end:
+		r1 = at
+	default:
+		r1 = shift(r1)
+	}
+	switch {
+	case r2 >= at && r2 <= end:
+		r2 = at - 1
+	default:
+		r2 = shift(r2)
+	}
+	first.row = r1
+	last.row = r2
+	out := make([]string, len(parsed))
+	for i, p := range parsed {
+		out[i] = p.String()
+	}
+	return strings.Join(out, ":"), true
+}
+
+func unquoteSheet(s string) string {
+	if strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'") && len(s) >= 2 {
+		return strings.ReplaceAll(s[1:len(s)-1], "''", "'")
+	}
+	return s
+}
+
+// refPartInfo es un extremo de una referencia: columna y/o fila, con sus "$".
+type refPartInfo struct {
+	colAbs, col, rowAbs string
+	row                 int // 0 si no tiene fila (columna completa)
+}
+
+func parseRefPart(part string) (refPartInfo, bool) {
+	m := refPart.FindStringSubmatch(part)
+	if m == nil || m[2] == "" && m[4] == "" {
+		return refPartInfo{}, false
+	}
+	info := refPartInfo{colAbs: m[1], col: m[2], rowAbs: m[3]}
+	if info.col == "" && info.colAbs == "$" {
+		// "$5" en filas completas: el "$" es de la fila.
+		info.colAbs, info.rowAbs = "", "$"
+	}
+	if m[4] != "" {
+		info.row, _ = strconv.Atoi(m[4])
+	}
+	return info, true
+}
+
+func (p refPartInfo) String() string {
+	s := ""
+	if p.col != "" {
+		s = p.colAbs + p.col
+	}
+	if p.row > 0 {
+		s += p.rowAbs + strconv.Itoa(p.row)
+	}
+	return s
+}
+
+// rewriteRefs aplica fn a cada referencia de la fórmula (prefijo de hoja con
+// su "!", y la referencia), sin tocar los textos entre comillas.
+func rewriteRefs(formula string, fn func(prefix, ref string) string) string {
 	var out strings.Builder
-	// Lo que está entre comillas dobles es texto y no se toca.
 	for i, segment := range splitStrings(formula) {
 		if i%2 == 1 {
 			out.WriteString(segment)
 		} else {
-			out.WriteString(translateSegment(segment, dRows, dCols))
+			out.WriteString(rewriteSegment(segment, fn))
 		}
 	}
 	return out.String()
@@ -72,7 +185,7 @@ func splitStrings(formula string) []string {
 	return append(parts, formula[start:])
 }
 
-func translateSegment(s string, dRows, dCols int) string {
+func rewriteSegment(s string, fn func(prefix, ref string) string) string {
 	var out strings.Builder
 	pos := 0
 	for pos < len(s) {
@@ -102,8 +215,7 @@ func translateSegment(s string, dRows, dCols int) string {
 		if loc[2] >= 0 {
 			prefix = s[pos+loc[2] : pos+loc[3]]
 		}
-		ref := s[pos+loc[4] : pos+loc[5]]
-		out.WriteString(translateRef(prefix, ref, dRows, dCols))
+		out.WriteString(fn(prefix, s[pos+loc[4]:pos+loc[5]]))
 		pos = end
 	}
 	out.WriteString(s[pos:])
@@ -114,38 +226,29 @@ func translateRef(prefix, ref string, dRows, dCols int) string {
 	parts := strings.Split(ref, ":")
 	out := make([]string, len(parts))
 	for i, part := range parts {
-		m := refPart.FindStringSubmatch(part)
-		if m == nil || m[2] == "" && m[4] == "" {
+		p, ok := parseRefPart(part)
+		if !ok {
 			return prefix + ref
 		}
-		colAbs, col, rowAbs, row := m[1], m[2], m[3], m[4]
-		if col == "" && colAbs == "$" {
-			// "$5" en filas completas: el "$" es de la fila.
-			colAbs, rowAbs = "", "$"
-		}
-		var b strings.Builder
-		if col != "" {
-			n, _ := excelize.ColumnNameToNumber(col)
-			if colAbs == "" {
+		if p.col != "" {
+			n, _ := excelize.ColumnNameToNumber(p.col)
+			if p.colAbs == "" {
 				n += dCols
 			}
 			if n < 1 {
 				return "#REF!"
 			}
-			name, _ := excelize.ColumnNumberToName(n)
-			b.WriteString(colAbs + name)
+			p.col, _ = excelize.ColumnNumberToName(n)
 		}
-		if row != "" {
-			n, _ := strconv.Atoi(row)
-			if rowAbs == "" {
-				n += dRows
+		if p.row > 0 {
+			if p.rowAbs == "" {
+				p.row += dRows
 			}
-			if n < 1 {
+			if p.row < 1 {
 				return "#REF!"
 			}
-			b.WriteString(rowAbs + strconv.Itoa(n))
 		}
-		out[i] = b.String()
+		out[i] = p.String()
 	}
 	return prefix + strings.Join(out, ":")
 }

@@ -85,6 +85,11 @@ func makeBD(t *testing.T, opts bdOptions) []byte {
 	_, _ = f.NewSheet("M_0")
 	boldStyle, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
 	must(t, f.SetCellValue("M_0", "A9", "ITEM"))
+	// Una combinada en la zona que el Resumen borra (filas 1..8), otra debajo y
+	// un salto de página.
+	must(t, f.MergeCell("M_0", "C2", "C3"))
+	must(t, f.MergeCell("M_0", "A12", "B13"))
+	must(t, f.InsertPageBreak("M_0", "A16"))
 	for r := firstRowMontaje; r <= mLastRow; r++ {
 		must(t, f.SetCellValue("M_0", fmt.Sprintf("B%d", r), fmt.Sprintf("Partida %d", r)))
 		must(t, f.SetCellFormula("M_0", fmt.Sprintf("G%d", r), fmt.Sprintf("SUM(I%d:Z%d)", r, r)))

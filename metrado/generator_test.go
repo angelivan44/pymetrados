@@ -2,6 +2,7 @@ package metrado
 
 import (
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -116,6 +117,20 @@ func TestGenerate(t *testing.T) {
 		i12, _ := f.GetCellStyle("Resumen", "I12")
 		if g12 != i12 {
 			t.Errorf("estilo I12 = %d, G12 = %d", i12, g12)
+		}
+		merges, _ := f.GetMergeCells("Resumen")
+		var refs []string
+		for _, m := range merges {
+			refs = append(refs, m.GetStartAxis()+":"+m.GetEndAxis())
+		}
+		if !reflect.DeepEqual(refs, []string{"A4:B5"}) {
+			t.Errorf("combinadas del Resumen = %v (la de las filas borradas debe desaparecer)", refs)
+		}
+		pkg, err := readPackage(toBytes(t, f))
+		must(t, err)
+		_, parts := pkg.sheets()
+		if xml := string(pkg.files[parts["Resumen"]]); !regexp.MustCompile(`<brk\b[^>]*\bid="7"`).MatchString(xml) {
+			t.Errorf("el salto de página del Resumen debía pasar de la fila 15 a la 7")
 		}
 	})
 }
