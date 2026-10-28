@@ -164,3 +164,36 @@ func TestConfigDaLaURLDeAcceso(t *testing.T) {
 		t.Fatalf("%v", out)
 	}
 }
+
+func callBinario(t *testing.T, handler http.HandlerFunc, bd, planilla []byte, tamano string) (int, map[string]any) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/generate", bytes.NewReader(append(append([]byte{}, bd...), planilla...)))
+	req.Header.Set("Content-Type", "application/octet-stream")
+	if tamano != "" {
+		req.Header.Set(CabeceraTamanoBD, tamano)
+	}
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	var out map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	return rec.Code, out
+}
+
+func TestEnvioBinario(t *testing.T) {
+	sinLogin(t)
+	bd := []byte("no es excel")
+	code, out := callBinario(t, Generate, bd, []byte("x"), fmt.Sprint(len(bd)))
+	if code != http.StatusUnprocessableEntity || !strings.Contains(firstError(out), "No se pudo abrir el archivo BD") {
+		t.Fatalf("separación BD/planilla: %d %v", code, out)
+	}
+	if code, out := callBinario(t, Validate, bd, []byte("x"), ""); code != http.StatusBadRequest || !strings.Contains(firstError(out), "tamaño") {
+		t.Fatalf("sin cabecera: %d %v", code, out)
+	}
+	if code, out := callBinario(t, Validate, bd, nil, fmt.Sprint(len(bd))); code != http.StatusBadRequest || firstError(out) != "El archivo Planilla está vacío." {
+		t.Fatalf("sin planilla: %d %v", code, out)
+	}
+	big := bytes.Repeat([]byte("x"), MaxUploadBytes)
+	if code, _ := callBinario(t, Validate, big, []byte("x"), fmt.Sprint(len(big))); code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("muy grande: %d", code)
+	}
+}

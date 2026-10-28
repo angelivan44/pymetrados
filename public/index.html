@@ -174,7 +174,11 @@ async function authHeaders() {
 async function api(path) {
   const headers = await authHeaders();
   if (!headers) return null;
-  const res = await fetch(path, { method: "POST", body: form(), headers });
+  const res = await fetch(path, {
+    method: "POST",
+    body: body(),
+    headers: { ...headers, "Content-Type": "application/octet-stream", "X-Tamano-Bd": String(files.bd.size) },
+  });
   if (res.status === 401) {
     showGate("Tu sesión terminó", "Vuelve a iniciar sesión en electroestudio.com para seguir usando PyMetrados.");
     return null;
@@ -213,11 +217,10 @@ function setStatus(kind, text) {
   $("status-text").textContent = text;
 }
 
-function form() {
-  const data = new FormData();
-  data.append("bd", files.bd);
-  data.append("planilla", files.planilla);
-  return data;
+// Los dos archivos van juntos como binario (la BD y luego la planilla, con el
+// tamaño de la BD en X-Tamano-Bd): en Vercel un multipart tarda ~3 veces más.
+function body() {
+  return new Blob([files.bd, files.planilla], { type: "application/octet-stream" });
 }
 
 function renderIssues(list, el) {

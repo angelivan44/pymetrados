@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -95,6 +96,69 @@ func autoriza(w http.ResponseWriter, r *http.Request) (*acceso.Usuario, bool) {
 	return u, true
 }
 
+// CabeceraTamanoBD indica, en el envío binario, cuántos bytes del cuerpo son la BD
+// (el resto es la planilla).
+const CabeceraTamanoBD = "X-Tamano-Bd"
+
+type archivos struct{ bd, planilla []byte }
+
+const mensajeMuyGrande = "Los archivos superan los 4 MB permitidos. Quita hojas o filas que no se usen y vuelve a intentarlo."
+
+// leeArchivos acepta dos formatos:
+//   - binario (application/octet-stream): la BD seguida de la planilla, con el tamaño
+//     de la BD en X-Tamano-Bd. Es el que usa la página: en Vercel un cuerpo multipart
+//     tarda ~3 veces más en llegar a la función (medido: 2,5 s contra 0,75 s).
+//   - multipart/form-data con los campos bd y planilla (curl, pruebas).
+//
+// Si falla devuelve el mensaje para el usuario y el status HTTP.
+func leeArchivos(r *http.Request) (archivos, string, int) {
+	esMuyGrande := func(err error) bool {
+		var tooLarge *http.MaxBytesError
+		return errors.As(err, &tooLarge)
+	}
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/octet-stream") {
+		n, err := strconv.Atoi(r.Header.Get(CabeceraTamanoBD))
+		if err != nil || n <= 0 {
+			return archivos{}, "Falta el tamaño del archivo BD en el envío.", http.StatusBadRequest
+		}
+		body, err := io.ReadAll(r.Body)
+		if esMuyGrande(err) {
+			return archivos{}, mensajeMuyGrande, http.StatusRequestEntityTooLarge
+		}
+		if err != nil {
+			return archivos{}, "No se pudieron leer los archivos enviados.", http.StatusBadRequest
+		}
+		if n >= len(body) {
+			return archivos{}, "El archivo Planilla está vacío.", http.StatusBadRequest
+		}
+		return archivos{bd: body[:n], planilla: body[n:]}, "", 0
+	}
+
+	if err := r.ParseMultipartForm(MaxUploadBytes); err != nil {
+		if esMuyGrande(err) {
+			return archivos{}, mensajeMuyGrande, http.StatusRequestEntityTooLarge
+		}
+		return archivos{}, "No se pudieron leer los archivos enviados.", http.StatusBadRequest
+	}
+	var out archivos
+	for _, field := range []struct {
+		name, label string
+		dest        *[]byte
+	}{{"bd", "BD", &out.bd}, {"planilla", "Planilla", &out.planilla}} {
+		file, _, err := r.FormFile(field.name)
+		if err != nil {
+			return archivos{}, fmt.Sprintf("Falta el archivo %s.", field.label), http.StatusBadRequest
+		}
+		data, err := io.ReadAll(file)
+		file.Close()
+		if err != nil || len(data) == 0 {
+			return archivos{}, fmt.Sprintf("El archivo %s está vacío.", field.label), http.StatusBadRequest
+		}
+		*field.dest = data
+	}
+	return out, "", 0
+}
+
 // load lee los dos archivos del formulario y los analiza. Si devuelve
 // ok=false ya respondió al cliente.
 func load(w http.ResponseWriter, r *http.Request, t *tiempos) (metrado.Report, *metrado.Inputs, *acceso.Usuario, bool) {
@@ -109,33 +173,13 @@ func load(w http.ResponseWriter, r *http.Request, t *tiempos) (metrado.Report, *
 	}
 	t.marca("acceso")
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadBytes)
-	if err := r.ParseMultipartForm(MaxUploadBytes); err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			singleError(w, http.StatusRequestEntityTooLarge,
-				"Los archivos superan los 4 MB permitidos. Quita hojas o filas que no se usen y vuelve a intentarlo.")
-		} else {
-			singleError(w, http.StatusBadRequest, "No se pudieron leer los archivos enviados.")
-		}
+	files, mensaje, status := leeArchivos(r)
+	if mensaje != "" {
+		singleError(w, status, mensaje)
 		return metrado.Report{}, nil, nil, false
 	}
-	files := map[string][]byte{}
-	for _, field := range []struct{ name, label string }{{"bd", "BD"}, {"planilla", "Planilla"}} {
-		file, _, err := r.FormFile(field.name)
-		if err != nil {
-			singleError(w, http.StatusBadRequest, fmt.Sprintf("Falta el archivo %s.", field.label))
-			return metrado.Report{}, nil, nil, false
-		}
-		data, err := io.ReadAll(file)
-		file.Close()
-		if err != nil || len(data) == 0 {
-			singleError(w, http.StatusBadRequest, fmt.Sprintf("El archivo %s está vacío.", field.label))
-			return metrado.Report{}, nil, nil, false
-		}
-		files[field.name] = data
-	}
 	t.marca("lectura")
-	report, inputs := metrado.Analyze(files["bd"], files["planilla"])
+	report, inputs := metrado.Analyze(files.bd, files.planilla)
 	t.marca("validacion")
 	if !report.OK {
 		var messages []string
