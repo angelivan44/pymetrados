@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PyMetrados</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --surface: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --line: #e3e1da;
+    --accent: #1f5f4a; --accent-ink: #ffffff; --accent-soft: #e5efe9;
+    --err: #a3271c; --err-soft: #fbeae7; --warn: #8a5a00; --warn-soft: #fbf1dc;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151614; --surface: #1e1f1c; --ink: #ecebe6; --muted: #a09f98; --line: #34352f;
+      --accent: #6fbf9d; --accent-ink: #0f1a15; --accent-soft: #1f2e27;
+      --err: #f08a7e; --err-soft: #3a1f1b; --warn: #e3b55c; --warn-soft: #352a14;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 48px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .lead { color: var(--muted); margin: 0 0 32px; }
+  .drops { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .drops { grid-template-columns: 1fr; } }
+  .drop { position: relative; display: block; background: var(--surface); border: 1.5px dashed var(--line);
+    border-radius: var(--radius); padding: 20px; cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over { border-color: var(--accent); }
+  .drop.filled { border-style: solid; }
+  .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .drop .step { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .drop .title { font-weight: 600; font-size: 16px; margin: 2px 0 6px; }
+  .drop .sheets { font-size: 13px; color: var(--muted); }
+  .drop .file { margin-top: 12px; font-size: 14px; color: var(--accent); font-weight: 500; word-break: break-all; }
+  .drop .file:empty::before { content: "Arrastra el archivo .xlsx o haz clic"; color: var(--muted); font-weight: 400; }
+  .panel { margin-top: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+  .panel[hidden] { display: none; }
+  .status { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .status.ok .dot { background: var(--accent); }
+  .status.bad .dot { background: var(--err); }
+  .status.busy .dot { animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .stats { display: flex; flex-wrap: wrap; gap: 24px; margin: 16px 0 4px; }
+  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 13px; color: var(--muted); }
+  .issues { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
+  .issue { border-radius: 8px; padding: 10px 12px; border-left: 3px solid; }
+  .issue.error { background: var(--err-soft); border-color: var(--err); }
+  .issue.warning { background: var(--warn-soft); border-color: var(--warn); }
+  .issue .where { font-size: 12px; font-family: ui-monospace, Menlo, monospace; color: var(--muted); }
+  .issue .hint { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  details { margin-top: 16px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .actions { margin-top: 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 12px 20px;
+    background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .note { font-size: 14px; color: var(--muted); }
+  footer { margin-top: 40px; font-size: 13px; color: var(--muted); }
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    margin-bottom: 28px; font-size: 14px; color: var(--muted); }
+  .topbar a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  .topbar a:hover { text-decoration: underline; }
+  .topbar[hidden], .gate[hidden], #tool[hidden] { display: none; }
+  .gate { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; }
+  .gate h2 { margin: 0 0 6px; font-size: 18px; }
+  .gate p { margin: 0 0 20px; color: var(--muted); }
+  .gate a.button { display: inline-block; font-weight: 600; border-radius: 8px; padding: 12px 20px;
+    background: var(--accent); color: var(--accent-ink); text-decoration: none; }
+</style>
+</head>
+<body>
+<main>
+  <nav class="topbar" id="topbar" hidden>
+    <a href="/">← electroestudio</a>
+    <span id="user"></span>
+  </nav>
+  <h1>PyMetrados</h1>
+  <p class="lead">Genera el metrado a partir de tu base de datos y tu planilla. No necesitas Excel instalado.</p>
+
+  <section class="gate" id="gate" hidden>
+    <h2 id="gate-title">Inicia sesión para continuar</h2>
+    <p id="gate-text">PyMetrados usa tu cuenta de electroestudio.com.</p>
+    <a class="button" id="gate-link" href="/">Iniciar sesión en electroestudio</a>
+  </section>
+
+  <div id="tool" hidden>
+  <div class="drops">
+    <label class="drop" id="drop-bd">
+      <input type="file" accept=".xlsx,.xlsm" data-key="bd">
+      <div class="step">Paso 1</div>
+      <div class="title">Base de datos (BD)</div>
+      <div class="sheets">Hojas: General · Configuracion · P_0 · M_0</div>
+      <div class="file"></div>
+    </label>
+    <label class="drop" id="drop-planilla">
+      <input type="file" accept=".xlsx,.xlsm" data-key="planilla">
+      <div class="step">Paso 2</div>
+      <div class="title">Planilla</div>
+      <div class="sheets">Hojas: DB · PLANILLA</div>
+      <div class="file"></div>
+    </label>
+  </div>
+
+  <section class="panel" id="panel" hidden>
+    <div class="status" id="status"><span class="dot"></span><span id="status-text"></span></div>
+    <div class="stats" id="stats"></div>
+    <ul class="issues" id="errors"></ul>
+    <details id="warnings-box" hidden><summary id="warnings-title"></summary><ul class="issues" id="warnings"></ul></details>
+    <details id="detail-box" hidden><summary>Ver filas por localidad</summary>
+      <table><thead><tr><th>ID</th><th>Localidad</th><th class="num">Filas</th></tr></thead><tbody id="detail"></tbody></table>
+    </details>
+    <div class="actions">
+      <button id="generate" disabled>Generar Metrado.xlsx</button>
+      <span class="note" id="note"></span>
+    </div>
+  </section>
+
+  </div>
+
+  <footer>Los archivos se procesan en el servidor y no se guardan.</footer>
+</main>
+
+<script>
+const files = { bd: null, planilla: null };
+const $ = (id) => document.getElementById(id);
+let validating = 0;
+
+// Sesión: el login es el de electroestudio.com (Neon Auth). La página pide un
+// JWT a Neon Auth y lo envía a la API; dura 15 minutos, así que se pide uno
+// nuevo antes de cada llamada. Las rutas son relativas para funcionar bajo
+// electroestudio.com/metrados/.
+let authUrl = null;
+
+async function getToken() {
+  const res = await fetch(`${authUrl}/token`, { credentials: "include" });
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error(`token ${res.status}`);
+  return (await res.json()).token || null;
+}
+
+function showGate(title, text) {
+  $("tool").hidden = true;
+  $("gate").hidden = false;
+  if (title) $("gate-title").textContent = title;
+  if (text) $("gate-text").textContent = text;
+}
+
+function userFromToken(token) {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload.email || payload.name || "";
+  } catch { return ""; }
+}
+
+/** Cabeceras para la API; null si ya no hay sesión (y muestra el aviso). */
+async function authHeaders() {
+  if (!authUrl) return {};
+  const token = await getToken();
+  if (!token) {
+    showGate("Tu sesión terminó", "Vuelve a iniciar sesión en electroestudio.com para seguir usando PyMetrados.");
+    return null;
+  }
+  return { Authorization: `Bearer ${token}` };
+}
+
+async function api(path) {
+  const headers = await authHeaders();
+  if (!headers) return null;
+  const res = await fetch(path, { method: "POST", body: form(), headers });
+  if (res.status === 401) {
+    showGate("Tu sesión terminó", "Vuelve a iniciar sesión en electroestudio.com para seguir usando PyMetrados.");
+    return null;
+  }
+  return res;
+}
+
+async function start() {
+  try {
+    const config = await (await fetch("api/config")).json();
+    if (!config.sinAcceso) {
+      if (!config.authUrl) throw new Error("sin authUrl");
+      authUrl = config.authUrl;
+      const token = await getToken();
+      if (!token) return showGate();
+      $("topbar").hidden = false;
+      $("user").textContent = userFromToken(token);
+    }
+    $("tool").hidden = false;
+  } catch (e) {
+    console.error("[acceso]", e);
+    showGate("No se pudo verificar tu sesión", "Revisa tu conexión y recarga la página.");
+    $("gate-link").textContent = "Recargar";
+    $("gate-link").href = location.href;
+  }
+}
+
+function esc(text) {
+  const d = document.createElement("div");
+  d.textContent = text == null ? "" : String(text);
+  return d.innerHTML;
+}
+
+function setStatus(kind, text) {
+  $("status").className = "status " + kind;
+  $("status-text").textContent = text;
+}
+
+function form() {
+  const data = new FormData();
+  data.append("bd", files.bd);
+  data.append("planilla", files.planilla);
+  return data;
+}
+
+function renderIssues(list, el) {
+  el.innerHTML = list.map((i) => `
+    <li class="issue ${i.level}">
+      ${i.where ? `<div class="where">${esc(i.where)}</div>` : ""}
+      <div>${esc(i.message)}</div>
+      ${i.hint ? `<div class="hint">${esc(i.hint)}</div>` : ""}
+    </li>`).join("");
+}
+
+function render(report) {
+  const { ok, errors, warnings, summary } = report;
+  if (ok) setStatus("ok", "Archivos listos para generar el metrado");
+  else setStatus("bad", errors.length === 1 ? "Hay 1 problema que corregir" : `Hay ${errors.length} problemas que corregir`);
+
+  $("stats").innerHTML = summary && summary.localidades != null ? `
+    <div class="stat"><b>${summary.localidades}</b><span>localidades</span></div>
+    <div class="stat"><b>${summary.filas}</b><span>filas de planilla</span></div>
+    <div class="stat"><b>${summary.columnas}</b><span>columnas</span></div>` : "";
+
+  renderIssues(errors, $("errors"));
+  $("warnings-box").hidden = !warnings.length;
+  $("warnings-box").open = ok && warnings.length <= 3;
+  $("warnings-title").textContent = warnings.length === 1 ? "1 advertencia" : `${warnings.length} advertencias`;
+  renderIssues(warnings, $("warnings"));
+
+  const detail = (summary && summary.detalle) || [];
+  $("detail-box").hidden = !detail.length;
+  $("detail").innerHTML = detail.map((d) =>
+    `<tr><td>${esc(d.id)}</td><td>${esc(d.nombre)}</td><td class="num">${d.filas}</td></tr>`).join("");
+
+  $("generate").disabled = !ok;
+  $("note").textContent = ok ? "" : "Corrige los archivos y vuelve a subirlos.";
+}
+
+async function readError(res) {
+  try { return await res.json(); }
+  catch { return { ok: false, errors: [{ level: "error", message: `El servidor respondió con un error (${res.status}).` }], warnings: [], summary: {} }; }
+}
+
+// Vercel acepta como máximo 4,5 MB por petición.
+const MAX_BYTES = 4 * 1024 * 1024;
+
+async function validate() {
+  if (!files.bd || !files.planilla) return;
+  const run = ++validating;
+  if (files.bd.size + files.planilla.size > MAX_BYTES) {
+    $("panel").hidden = false;
+    render({ ok: false, warnings: [], summary: null, errors: [{
+      level: "error",
+      message: "Entre los dos archivos superan los 4 MB permitidos.",
+      hint: "Quita hojas o filas que no se usen (por ejemplo, filas de relleno al final de la planilla) y vuelve a subirlos.",
+    }] });
+    return;
+  }
+  $("panel").hidden = false;
+  $("generate").disabled = true;
+  setStatus("busy", "Revisando archivos…");
+  $("stats").innerHTML = $("errors").innerHTML = $("note").textContent = "";
+  $("warnings-box").hidden = $("detail-box").hidden = true;
+  try {
+    const res = await api("api/validate");
+    if (!res) return;
+    const report = res.ok ? await res.json() : await readError(res);
+    if (run === validating) render(report);
+  } catch {
+    if (run === validating) setStatus("bad", "No se pudo conectar con el servidor. Intenta de nuevo.");
+  }
+}
+
+async function generate() {
+  const btn = $("generate");
+  btn.disabled = true;
+  btn.textContent = "Generando…";
+  $("note").textContent = "";
+  try {
+    const res = await api("api/generate");
+    if (!res) return;
+    if (!res.ok) { render(await readError(res)); return; }
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement("a"), { href: url, download: "Metrado.xlsx" });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    $("note").textContent = "Descarga iniciada.";
+    btn.disabled = false;
+  } catch {
+    $("note").textContent = "No se pudo conectar con el servidor. Intenta de nuevo.";
+    btn.disabled = false;
+  } finally {
+    btn.textContent = "Generar Metrado.xlsx";
+  }
+}
+
+function pick(input, file) {
+  if (!file) return;
+  const drop = input.closest(".drop");
+  files[input.dataset.key] = file;
+  drop.classList.add("filled");
+  drop.querySelector(".file").textContent = file.name;
+  validate();
+}
+
+document.querySelectorAll(".drop input").forEach((input) => {
+  const drop = input.closest(".drop");
+  input.addEventListener("change", () => pick(input, input.files[0]));
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    pick(input, e.dataTransfer.files[0]);
+  });
+});
+$("generate").addEventListener("click", generate);
+start();
+</script>
+</body>
+</html>

@@ -1,235 +1,133 @@
-# PyMetrados v2.1.0 - Calculadora Profesional de Metrados
+# PyMetrados
 
-Una aplicación de escritorio moderna para cálculos de metrados de construcción con sistema de actualizaciones automáticas y analíticas simplificadas con **Mixpanel**.
+Aplicación web que genera `Metrado.xlsx` a partir de una **BD** y una **planilla** en Excel.
+No necesita Windows ni Excel instalado: los archivos se validan y procesan en una función
+serverless en Go ([excelize](https://github.com/xuri/excelize)) desplegada en Vercel.
 
-## 🚀 Características Principales
+Es una de las herramientas de **electroestudio.com** y usa su mismo login: se publica en
+`electroestudio.com/metrados/` (el portal reenvía esa ruta a este proyecto), así que comparte la
+sesión de Neon Auth del portal.
 
-### ✨ Interfaz Moderna en Español
-- **Diseño profesional** con tarjetas elegantes y efectos hover
-- **Interfaz completamente en español** para usuarios hispanohablantes
-- **Botón de procesamiento prominente** que cambia de color según el estado
-- **Mensajes informativos** que guían al usuario paso a paso
-- **Retroalimentación visual** clara en cada acción
+## Acceso
 
-### 🔄 Sistema de Actualizaciones Automáticas
-- **Verificación automática** al iniciar la aplicación
-- **Descarga e instalación** automática de nuevas versiones
-- **Notificaciones elegantes** cuando hay actualizaciones disponibles
-- **GitHub Releases** como servidor de actualización
-
-### 📊 Analíticas Simplificadas con Mixpanel
-- **Eventos básicos** y útiles sin sobrecarga de datos
-- **Configuración simple** con solo el token de Mixpanel
-- **Eventos en español** para mejor comprensión
-- **Privacidad respetada** con datos mínimos necesarios
-
-## 📋 Requisitos del Sistema
-
-### Dependencias Principales
 ```
-Python >= 3.8
-tkinter (incluido con Python)
-Pillow >= 8.3.0
-mixpanel >= 4.10.0
-requests >= 2.28.0
+navegador ──► electroestudio.com/metrados/  ──(rewrite del portal)──► este proyecto en Vercel
+   │                                                                     │
+   └─ GET <NEON_AUTH_URL>/token (cookie de sesión) ─► JWT                │
+      POST api/generate  Authorization: Bearer <JWT> ───────────────────►┘ verifica firma (JWKS),
+                                                                           emisor y vencimiento
 ```
 
-## 🛠️ Instalación Rápida
+| Variable | Dónde | Para qué |
+|---|---|---|
+| `NEON_AUTH_URL` | Vercel (obligatoria) | URL de Neon Auth del portal, la misma que `VITE_NEON_AUTH_URL` de `dltcad-web` |
+| `METRADOS_SIN_ACCESO=1` | solo desarrollo | desactiva el login; `go run ./cmd/dev` la activa sola si no hay `NEON_AUTH_URL` |
 
-### 1. Instalar Dependencias
+Sin `NEON_AUTH_URL` (y sin `METRADOS_SIN_ACCESO`) la API rechaza todo: nunca queda abierta por error.
+
+## Uso
+
+1. Sube la **BD** (hojas `General`, `Configuracion`, `P_0`, `M_0`).
+2. Sube la **Planilla** (hojas `DB`, `PLANILLA`).
+3. La página valida ambos archivos al instante y muestra cada problema con su ubicación
+   (por ejemplo `BD › Configuracion!B6`) y cómo corregirlo.
+4. Si no hay errores, pulsa **Generar Metrado.xlsx**.
+
+Entre los dos archivos pueden pesar hasta 4 MB (límite de Vercel por petición).
+
+## Formato de entrada
+
+**BD**
+
+| Hoja | Contenido |
+|---|---|
+| `General` | Desde la fila 2: A = ID, B = Nombre, C = Código, D = Sistema, E = Ubicación |
+| `Configuracion` | B2–B5: celdas de nombre, código, sistema y ubicación en `P_0`. B6: primera celda de datos en `P_0` (ej. `A15`). B7: celda de cantidad de elementos. B8: primera fila del metrado en `M_0`. B9: celda total de cada `M_` que va al Resumen. B10: última celda de encabezados de `PLANILLA` (ej. `AG1`) |
+| `P_0` | Plantilla de planilla por localidad |
+| `M_0` | Plantilla de metrado por localidad (columna I con las fórmulas por elemento) |
+| Otras (`DATOS`, `BD_LP`…) | Tablas que usan las plantillas; se copian tal cual al Metrado |
+
+**Planilla**
+
+| Hoja | Contenido |
+|---|---|
+| `DB` | Columna A desde la fila 2: ID de la localidad de cada fila de `PLANILLA` |
+| `PLANILLA` | Fila 1: encabezados. Desde la fila 2: un elemento por fila |
+
+La fila *n* de `DB` corresponde a la fila *n* de `PLANILLA`. Las filas no necesitan estar
+ordenadas por ID: se agrupan automáticamente. Las filas sin ID al final (relleno con
+fórmulas) se ignoran.
+
+## Desarrollo
+
+Requiere Go 1.24+.
+
 ```bash
-pip install -r requirements.txt
+go run ./cmd/dev          # http://localhost:3000, sin login
+go test ./...
 ```
 
-### 2. Configurar Mixpanel (Opcional)
-Edita `config.json`:
-```json
-{
-    "analytics": {
-        "mixpanel_token": "TU_TOKEN_DE_MIXPANEL",
-        "enabled": true
-    }
-}
-```
+Con el login real, junto al portal (`dltcad-web`, que en desarrollo reenvía `/metrados/` al puerto 3000):
 
-### 3. Ejecutar Aplicación
 ```bash
-python pymetrados.py
+NEON_AUTH_URL=<url de Neon Auth> go run ./cmd/dev
+# en dltcad-web/apps/web: npx vite  → http://localhost:5173, iniciar sesión y abrir PyMetrados
 ```
 
-## 🎮 Uso de la Aplicación
+Prueba con los ejemplos de la release v1.0 (`DM_LP.xlsx`, `Planilla LP.xlsx`):
 
-### Proceso Simple en 4 Pasos:
-
-1. **📋 Seleccionar Archivo de Configuración**
-   - Haz clic en "Examinar" en la primera tarjeta
-   - Selecciona tu archivo Excel de configuración (.xlsx)
-   
-2. **📊 Seleccionar Archivo de Planilla**
-   - Haz clic en "Examinar" en la segunda tarjeta
-   - Selecciona tu archivo Excel de planilla (.xlsx)
-   
-3. **💾 Seleccionar Carpeta de Exportación**
-   - Haz clic en "Seleccionar" en la tercera tarjeta
-   - Elige dónde guardar el archivo resultado
-   
-4. **🚀 Iniciar Procesamiento**
-   - El botón se volverá **verde** automáticamente
-   - Mensaje: "✅ ¡Todo listo! Haga clic para iniciar el procesamiento"
-   - Haz clic en "🚀 INICIAR PROCESAMIENTO"
-
-### Estados del Botón de Procesamiento:
-
-- **🔴 Gris**: Faltan archivos por seleccionar
-  - Mensaje: "⚠️ Falta seleccionar: archivo de configuración, archivo de planilla"
-  
-- **🟢 Verde**: Todo listo para procesar
-  - Mensaje: "✅ ¡Todo listo! Haga clic para iniciar el procesamiento"
-
-## 📊 Eventos de Mixpanel (Simplificados)
-
-La aplicación envía solo los eventos esenciales:
-
-```javascript
-// Al abrir la aplicación
-App_Iniciado: {
-    user_id: "abc12345",
-    version: "2.1.0",
-    sistema: "Windows"
-}
-
-// Al seleccionar archivos
-Archivo_Seleccionado: {
-    user_id: "abc12345",
-    tipo: "configuracion" | "planilla"
-}
-
-// Al seleccionar carpeta
-Carpeta_Seleccionada: {
-    user_id: "abc12345"
-}
-
-// Al iniciar procesamiento
-Procesamiento_Iniciado: {
-    user_id: "abc12345",
-    hora: "2024-01-15T10:30:00"
-}
-
-// Al completar exitosamente
-Procesamiento_Exitoso: {
-    user_id: "abc12345",
-    tiempo_segundos: 12.4
-}
-
-// En caso de error
-Procesamiento_Error: {
-    user_id: "abc12345",
-    error: "mensaje_del_error"
-}
-
-// Al cerrar aplicación
-App_Cerrado: {
-    user_id: "abc12345"
-}
+```bash
+METRADO_REAL_DIR=/ruta/a/los/ejemplos go test ./metrado -run ArchivosReales -v
 ```
 
-## 🔧 Configuración
+Deja el resultado en `Metrado_go.xlsx` dentro de esa carpeta.
 
-### Archivo config.json Simplificado:
-```json
-{
-    "app": {
-        "name": "PyMetrados",
-        "version": "2.1.0"
-    },
-    "update_server": {
-        "github_repo": "yourusername/pymetrados",
-        "api_url": "https://api.github.com/repos/yourusername/pymetrados/releases/latest"
-    },
-    "analytics": {
-        "mixpanel_token": "tu_token_de_mixpanel",
-        "enabled": true
-    },
-    "features": {
-        "update_notifications": true
-    }
-}
+## Despliegue en Vercel
+
+```bash
+npm i -g vercel
+vercel                                   # primera vez: vincula el proyecto
+vercel env add NEON_AUTH_URL production  # la URL de Neon Auth del portal
+vercel --prod
 ```
 
-### Deshabilitar Analíticas:
-```json
-{
-    "analytics": {
-        "enabled": false
-    }
-}
+Vercel sirve `public/` como sitio estático y cada archivo de `api/` como una función Go
+(`/api/config`, `/api/validate` y `/api/generate`). Después, en el `vercel.json` del portal
+(`dltcad-web/apps/web`), la ruta `/metrados/` debe apuntar al dominio de este proyecto. El plan
+gratuito (Hobby) es solo para uso no comercial.
+
+## Estructura
+
+```
+public/index.html       página única
+api/                    Vercel Functions (config.go, validate.go, generate.go)
+internal/httpapi/       handlers HTTP compartidos por Vercel y el servidor local
+internal/acceso/        verificación del JWT de Neon Auth (sesión de electroestudio.com)
+metrado/
+  inputs.go             lectura y validación de BD y planilla (mensajes para el usuario)
+  generator.go          construcción de Metrado.xlsx (equivalente a la versión COM)
+  formula.go            traslado de referencias para el AutoFill
+  xlsxparts.go          ajustes finales al .xlsx para que Excel lo abra sin reparar
+cmd/dev/                servidor local
+legacy/                 aplicación de escritorio anterior (Tkinter + Excel COM), solo referencia
 ```
 
-### Deshabilitar Actualizaciones:
-```json
-{
-    "features": {
-        "update_notifications": false
-    }
-}
-```
+## Diferencias con la versión de escritorio
 
-## 🎯 Beneficios de la Versión Simplificada
+Verificado con los ejemplos de la release v1.0: tras recalcular en Excel, las 188.355 celdas
+coinciden con el `Metrado.xlsx` de referencia, salvo las dos columnas que antes se perdían
+(ver abajo).
 
-### Para el Usuario:
-- ✅ **Interfaz más clara** y fácil de usar
-- ✅ **Menos distracciones** - solo lo esencial
-- ✅ **Respuesta rápida** sin procesos innecesarios
-- ✅ **Mensajes claros** en español
-- ✅ **Proceso guiado** paso a paso
-
-### Para el Desarrollador:
-- ✅ **Código 70% más limpio** y mantenible
-- ✅ **Analíticas útiles** sin ruido
-- ✅ **Debugging más fácil** con menos complejidad
-- ✅ **Actualizaciones simples** del código
-
-## 🎨 Características de la Interfaz
-
-### Diseño Moderno:
-- **Tarjetas elegantes** con efectos hover
-- **Paleta de colores profesional** (azul primario, verde éxito)
-- **Tipografía Segoe UI** para consistencia con Windows
-- **Iconos emotivos** para mejor UX (📋, 📊, 💾, 🚀)
-
-### Retroalimentación Visual:
-- **Estados claros** de cada archivo seleccionado
-- **Botón dinámico** que cambia según disponibilidad
-- **Mensajes informativos** que guían al usuario
-- **Barra de progreso** durante el procesamiento
-
-## 🔄 Sistema de Actualizaciones
-
-### Flujo Automático:
-1. **Al iniciar** → Verificar actualizaciones en GitHub
-2. **Si hay nueva versión** → Mostrar notificación elegante
-3. **Usuario acepta** → Descargar con progreso visual
-4. **Instalación** → Un clic y cierre automático
-5. **Tracking** → Eventos en Mixpanel para analíticas
-
-## 🐛 Solución de Problemas
-
-### El botón no aparece verde:
-- Verifica que hayas seleccionado **todos** los archivos
-- El mensaje debe decir "✅ ¡Todo listo!"
-
-### No se muestran analíticas:
-- Verifica tu token de Mixpanel en `config.json`
-- Asegúrate de que `enabled: true`
-
-### Error al procesar:
-- Verifica que los archivos Excel sean válidos
-- Asegúrate de tener permisos de escritura en la carpeta
-
-## 📞 Contacto
-
-**Angel Huayas** - www.angelhuayas.com
-
----
-
-**¡Tu PyMetrados ahora es más simple, claro y efectivo!** 🚀✨ 
+- No depende de Windows, de Excel ni de su idioma.
+- El Metrado es autónomo: las hojas auxiliares de la BD (`DATOS`, `BD_LP`…) y sus nombres
+  definidos se copian al resultado. Antes quedaban como vínculos externos al archivo BD en el
+  disco de quien lo generó.
+- Las filas de la planilla se agrupan por ID aunque estén desordenadas (antes se mezclaban
+  datos entre localidades sin avisar).
+- Se copian todas las columnas hasta `Configuracion!B10`, incluidas las que no tienen
+  encabezado. Antes se copiaban tantas columnas como encabezados únicos, así que se perdían
+  las últimas (en el ejemplo, "Abrazadera…" y "Comentarios").
+- Los IDs `1`, `1.0` y `"1"` se consideran el mismo.
+- Las localidades de `General` sin filas en la planilla aparecen en el Resumen sin fórmula
+  (antes apuntaban a una hoja inexistente).
+- Las celdas vacías usan la fuente de la BD (antes, la del libro nuevo que creaba Excel).
