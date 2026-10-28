@@ -10,6 +10,8 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
+	"strings"
+	"time"
 
 	"github.com/angelivan44/pymetrados/acceso"
 	"github.com/angelivan44/pymetrados/metrado"
@@ -19,9 +21,34 @@ import (
 const MaxUploadBytes = 4*1024*1024 + 300*1024
 
 func init() {
-	// excelize genera mucha basura al reescribir fórmulas; con menos ciclos de
-	// GC la generación tarda bastante menos y la memoria sigue holgada.
-	debug.SetGCPercent(400)
+	// excelize genera mucha basura al reescribir fórmulas. La función tiene 1
+	// vCPU y 2 GB: con GOGC=1000 la generación baja ~20% (pico medido ~0,9 GB) y
+	// el tope de memoria obliga a recolectar antes de acercarse al límite.
+	debug.SetGCPercent(1000)
+	debug.SetMemoryLimit(1536 << 20)
+}
+
+// tiempos registra cuánto tarda cada etapa de una petición (se ve en los
+// logs de Vercel y en la cabecera Server-Timing).
+type tiempos struct {
+	inicio time.Time
+	etapas []string
+	ultimo time.Time
+}
+
+func nuevosTiempos() *tiempos {
+	ahora := time.Now()
+	return &tiempos{inicio: ahora, ultimo: ahora}
+}
+
+func (t *tiempos) marca(etapa string) {
+	ahora := time.Now()
+	t.etapas = append(t.etapas, fmt.Sprintf("%s;dur=%d", etapa, ahora.Sub(t.ultimo).Milliseconds()))
+	t.ultimo = ahora
+}
+
+func (t *tiempos) cabecera() string {
+	return strings.Join(append(t.etapas, fmt.Sprintf("total;dur=%d", time.Since(t.inicio).Milliseconds())), ", ")
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
@@ -70,16 +97,17 @@ func autoriza(w http.ResponseWriter, r *http.Request) (*acceso.Usuario, bool) {
 
 // load lee los dos archivos del formulario y los analiza. Si devuelve
 // ok=false ya respondió al cliente.
-func load(w http.ResponseWriter, r *http.Request) (metrado.Report, *metrado.Inputs, bool) {
+func load(w http.ResponseWriter, r *http.Request, t *tiempos) (metrado.Report, *metrado.Inputs, *acceso.Usuario, bool) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		singleError(w, http.StatusMethodNotAllowed, "Usa POST con los archivos bd y planilla.")
-		return metrado.Report{}, nil, false
+		return metrado.Report{}, nil, nil, false
 	}
 	usuario, ok := autoriza(w, r)
 	if !ok {
-		return metrado.Report{}, nil, false
+		return metrado.Report{}, nil, nil, false
 	}
+	t.marca("acceso")
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadBytes)
 	if err := r.ParseMultipartForm(MaxUploadBytes); err != nil {
 		var tooLarge *http.MaxBytesError
@@ -89,24 +117,26 @@ func load(w http.ResponseWriter, r *http.Request) (metrado.Report, *metrado.Inpu
 		} else {
 			singleError(w, http.StatusBadRequest, "No se pudieron leer los archivos enviados.")
 		}
-		return metrado.Report{}, nil, false
+		return metrado.Report{}, nil, nil, false
 	}
 	files := map[string][]byte{}
 	for _, field := range []struct{ name, label string }{{"bd", "BD"}, {"planilla", "Planilla"}} {
 		file, _, err := r.FormFile(field.name)
 		if err != nil {
 			singleError(w, http.StatusBadRequest, fmt.Sprintf("Falta el archivo %s.", field.label))
-			return metrado.Report{}, nil, false
+			return metrado.Report{}, nil, nil, false
 		}
 		data, err := io.ReadAll(file)
 		file.Close()
 		if err != nil || len(data) == 0 {
 			singleError(w, http.StatusBadRequest, fmt.Sprintf("El archivo %s está vacío.", field.label))
-			return metrado.Report{}, nil, false
+			return metrado.Report{}, nil, nil, false
 		}
 		files[field.name] = data
 	}
+	t.marca("lectura")
 	report, inputs := metrado.Analyze(files["bd"], files["planilla"])
+	t.marca("validacion")
 	if !report.OK {
 		var messages []string
 		for _, e := range report.Errors {
@@ -114,7 +144,7 @@ func load(w http.ResponseWriter, r *http.Request) (metrado.Report, *metrado.Inpu
 		}
 		log.Printf("validación con errores (%s): %q", usuario.Correo, messages)
 	}
-	return report, inputs, true
+	return report, inputs, usuario, true
 }
 
 // Config le dice a la página dónde pedir el token de sesión (la URL de Neon
@@ -134,17 +164,30 @@ func Config(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"sinAcceso": false, "authUrl": v.AuthURL()})
 }
 
+// registra deja en el log de Vercel los tiempos de la petición.
+func registra(w http.ResponseWriter, accion string, u *acceso.Usuario, t *tiempos, extra string) {
+	w.Header().Set("Server-Timing", t.cabecera())
+	correo := ""
+	if u != nil {
+		correo = u.Correo
+	}
+	log.Printf("%s usuario=%s %s %s", accion, correo, strings.ReplaceAll(t.cabecera(), ";dur=", "="), extra)
+}
+
 // Validate responde con el reporte de validación (errores, advertencias y resumen).
 func Validate(w http.ResponseWriter, r *http.Request) {
-	report, _, ok := load(w, r)
+	t := nuevosTiempos()
+	report, _, usuario, ok := load(w, r, t)
 	if ok {
+		registra(w, "validate", usuario, t, fmt.Sprintf("ok=%v", report.OK))
 		writeJSON(w, http.StatusOK, report)
 	}
 }
 
 // Generate devuelve Metrado.xlsx, o el reporte con status 422 si hay errores.
 func Generate(w http.ResponseWriter, r *http.Request) {
-	report, inputs, ok := load(w, r)
+	t := nuevosTiempos()
+	report, inputs, usuario, ok := load(w, r, t)
 	if !ok {
 		return
 	}
@@ -160,6 +203,8 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 				"así que es un problema de la aplicación: envíanos ambos archivos para revisarlo.")
 		return
 	}
+	t.marca("generacion")
+	registra(w, "generate", usuario, t, fmt.Sprintf("filas=%d bytes=%d", report.Summary.Filas, len(content)))
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", `attachment; filename="Metrado.xlsx"`)
 	_, _ = w.Write(content)
