@@ -6,86 +6,267 @@
 <title>PyMetrados</title>
 <style>
   :root {
-    --bg: #f6f5f1; --surface: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --line: #e3e1da;
-    --accent: #1f5f4a; --accent-ink: #ffffff; --accent-soft: #e5efe9;
+    --bg: #f6f5f1; --surface: #ffffff; --sunken: #f0efea; --ink: #1d1d1b; --muted: #65645e; --faint: #8b8a83;
+    --line: #e3e1da; --line-strong: #cfccc2;
+    --accent: #1f5f4a; --accent-hover: #184c3b; --accent-ink: #ffffff; --accent-soft: #e5efe9;
     --err: #a3271c; --err-soft: #fbeae7; --warn: #8a5a00; --warn-soft: #fbf1dc;
-    --radius: 10px;
+    --mark-l: 42%; --mark-bg-a: .16; --tag-ink: #ffffff;
+    --shadow: 0 1px 2px rgb(29 29 27 / .05), 0 6px 18px -8px rgb(29 29 27 / .12);
+    --radius: 12px; --radius-sm: 8px;
+    --ease: cubic-bezier(.16, 1, .3, 1);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #151614; --surface: #1e1f1c; --ink: #ecebe6; --muted: #a09f98; --line: #34352f;
-      --accent: #6fbf9d; --accent-ink: #0f1a15; --accent-soft: #1f2e27;
+      --bg: #151614; --surface: #1e1f1c; --sunken: #262723; --ink: #ecebe6; --muted: #a8a79f; --faint: #85847d;
+      --line: #34352f; --line-strong: #4a4b44;
+      --accent: #6fbf9d; --accent-hover: #86cdaf; --accent-ink: #0f1a15; --accent-soft: #1f2e27;
       --err: #f08a7e; --err-soft: #3a1f1b; --warn: #e3b55c; --warn-soft: #352a14;
+      --mark-l: 66%; --mark-bg-a: .14; --tag-ink: #151614;
+      --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 8px 24px -10px rgb(0 0 0 / .5);
     }
   }
+  :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 860px; margin: 0 auto; padding: 48px 16px 64px; }
-  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
-  .lead { color: var(--muted); margin: 0 0 32px; }
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1040px; margin: 0 auto; padding: 56px 16px 72px; }
+  h1 { font-size: 30px; line-height: 1.15; margin: 0 0 8px; letter-spacing: -0.02em; font-weight: 700; }
+  h2 { font-size: 17px; line-height: 1.3; margin: 0; letter-spacing: -0.005em; }
+  .lead { color: var(--muted); margin: 0; max-width: 60ch; text-wrap: pretty; }
+  a { color: var(--accent); font-weight: 500; text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .intro { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
+  .examples { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+  .examples a { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* Pasos */
+  .step-label { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .step-num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex: none;
+    font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+    background: var(--sunken); color: var(--muted); border: 1px solid var(--line); transition: background .3s var(--ease), color .3s var(--ease); }
+  .step-num.done { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .step-num.attn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+  .step-label h2 { flex: 1; }
+
+  /* Subida de archivos */
   .drops { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 640px) { .drops { grid-template-columns: 1fr; } }
-  .drop { position: relative; display: block; background: var(--surface); border: 1.5px dashed var(--line);
-    border-radius: var(--radius); padding: 20px; cursor: pointer; transition: border-color .15s, background .15s; }
+  .drops > div { display: flex; flex-direction: column; }
+  .drops .drop { flex: 1; }
+  @media (max-width: 680px) { .drops { grid-template-columns: 1fr; } }
+  .drop { position: relative; display: flex; flex-direction: column; background: var(--surface);
+    border: 1.5px dashed var(--line-strong); border-radius: var(--radius); padding: 20px; cursor: pointer;
+    transition: border-color .2s var(--ease), background .2s var(--ease), box-shadow .2s var(--ease); }
   .drop:hover, .drop.over { border-color: var(--accent); }
-  .drop.filled { border-style: solid; }
-  .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-  .drop .step { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-  .drop .title { font-weight: 600; font-size: 16px; margin: 2px 0 6px; }
-  .drop .sheets { font-size: 13px; color: var(--muted); }
-  .drop .file { margin-top: 12px; font-size: 14px; color: var(--accent); font-weight: 500; word-break: break-all; }
-  .drop .file:empty::before { content: "Arrastra el archivo .xlsx o haz clic"; color: var(--muted); font-weight: 400; }
-  .panel { margin-top: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
-  .panel[hidden] { display: none; }
-  .status { display: flex; align-items: center; gap: 10px; font-weight: 600; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
-  .status.ok .dot { background: var(--accent); }
-  .status.bad .dot { background: var(--err); }
+  .drop.over { background: var(--accent-soft); }
+  .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .drop.filled { border-style: solid; border-color: var(--line); box-shadow: var(--shadow); }
+  .drop.filled[data-state="ok"] { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .drop.filled[data-state="error"] { border-color: color-mix(in srgb, var(--err) 55%, var(--line)); }
+  .drop.filled[data-state="pendiente"] { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+  .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .drop-head { display: flex; gap: 14px; align-items: flex-start; }
+  .drop-icon { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; flex: none;
+    background: var(--sunken); color: var(--muted); transition: background .2s var(--ease), color .2s var(--ease); }
+  .drop-icon svg.i { width: 20px; height: 20px; }
+  .drop:hover .drop-icon, .drop.over .drop-icon { background: var(--accent-soft); color: var(--accent); }
+  .drop[data-state="ok"] .drop-icon { background: var(--accent-soft); color: var(--accent); }
+  .drop-head > div { min-width: 0; }
+  .drop-title { font-weight: 650; font-size: 16px; line-height: 1.3; }
+  @media (max-width: 480px) {
+    .drop-icon { display: none; }
+    .drop-head { flex-wrap: wrap; }
+    .pill { order: -1; margin-left: 0; }
+    .drop-head > div { flex-basis: 100%; }
+  }
+  .sheets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .sheet { font: 500 11.5px/1 ui-monospace, Menlo, monospace; padding: 4px 6px; border-radius: 5px;
+    background: var(--sunken); color: var(--muted); }
+  .sheet.opt { background: none; border: 1px dashed var(--line-strong); }
+  .pill { margin-left: auto; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+    background: var(--sunken); color: var(--muted); }
+  .pill:empty { display: none; }
+  [data-state="ok"] .pill { background: var(--accent-soft); color: var(--accent); }
+  [data-state="error"] .pill { background: var(--err-soft); color: var(--err); }
+  [data-state="pendiente"] .pill { background: var(--warn-soft); color: var(--warn); }
+  [data-state="busy"] .pill { animation: pulse 1.2s ease-in-out infinite; }
+  .file-row { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px;
+    font-size: 14px; min-height: 22px; }
+  .file-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-size { color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .file-cta { color: var(--muted); }
+  .file-cta b { color: var(--accent); font-weight: 600; }
+  .file-change { margin-left: auto; font-size: 13px; color: var(--accent); font-weight: 500; white-space: nowrap; }
+  .checks { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; font-size: 13.5px; line-height: 1.45; }
+  .checks:empty { display: none; }
+  .checks li { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; }
+  .checks svg.i { width: 14px; height: 14px; margin-top: 3px; stroke-width: 2.2; }
+  .checks .ok svg { color: var(--accent); }
+  .checks .info, .checks .busy { color: var(--muted); }
+  .checks .pendiente { color: var(--warn); }
+  .checks .error { color: var(--err); }
+
+  /* Secciones */
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .section { margin-top: 32px; }
+  .section > .card { padding: 20px; }
+  .summary-line { margin: 0; font-size: 14.5px; color: var(--muted); }
+  .summary-line.attn { color: var(--warn); font-weight: 500; }
+
+  .status { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 16px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); flex: none; }
+  .status.ok .dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .status.bad .dot { background: var(--err); box-shadow: 0 0 0 4px var(--err-soft); }
   .status.busy .dot { animation: pulse 1s infinite; }
-  @keyframes pulse { 50% { opacity: .3; } }
-  .stats { display: flex; flex-wrap: wrap; gap: 24px; margin: 16px 0 4px; }
-  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
-  .stat span { font-size: 13px; color: var(--muted); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .stats { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 8px 0 0 20px; }
+  .stats:empty { display: none; }
+  .stat b { font-size: 22px; font-variant-numeric: tabular-nums; margin-right: 6px; letter-spacing: -0.01em; }
+  .stat span { font-size: 14px; color: var(--muted); }
   .issues { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
-  .issue { border-radius: 8px; padding: 10px 12px; border-left: 3px solid; }
-  .issue.error { background: var(--err-soft); border-color: var(--err); }
-  .issue.warning { background: var(--warn-soft); border-color: var(--warn); }
-  .issue .where { font-size: 12px; font-family: ui-monospace, Menlo, monospace; color: var(--muted); }
-  .issue .hint { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .issues:empty { display: none; }
+  .issue { border-radius: var(--radius-sm); padding: 10px 12px; display: grid; grid-template-columns: 18px 1fr; gap: 10px; }
+  .issue svg.i { margin-top: 3px; }
+  .issue.error { background: var(--err-soft); }
+  .issue.error svg { color: var(--err); }
+  .issue.warning { background: var(--warn-soft); }
+  .issue.warning svg { color: var(--warn); }
+  .issue .where { font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--muted); margin-bottom: 2px; }
+  .issue .hint { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
   details { margin-top: 16px; }
-  summary { cursor: pointer; color: var(--muted); font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  summary { cursor: pointer; color: var(--muted); font-size: 14px; width: fit-content; }
+  summary:hover { color: var(--ink); }
+  table.detail { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+  table.detail th, table.detail td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  table.detail th { font-weight: 600; color: var(--muted); font-size: 13px; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .actions { margin-top: 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 12px 20px;
-    background: var(--accent); color: var(--accent-ink); cursor: pointer; }
-  button:disabled { opacity: .4; cursor: not-allowed; }
+  .result-head { display: flex; justify-content: space-between; align-items: center; gap: 16px 24px; flex-wrap: wrap; }
+  .actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .actions .note:empty { display: none; }
+  @media (max-width: 680px) { .actions { align-items: stretch; width: 100%; } .actions button { justify-content: center; } }
+
+  button { font: inherit; font-weight: 600; border: 0; border-radius: var(--radius-sm); padding: 12px 20px;
+    background: var(--accent); color: var(--accent-ink); cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+    transition: background .15s var(--ease), transform .15s var(--ease), opacity .15s; }
+  button:hover:not(:disabled) { background: var(--accent-hover); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button.big { padding: 14px 22px; font-size: 16px; }
+  button.secondary { background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); padding: 8px 14px; font-size: 14px; }
+  button.secondary:hover:not(:disabled) { background: var(--sunken); }
+  button.link { background: none; color: var(--accent); padding: 4px 0; font-size: 14px; font-weight: 500; }
+  button.link:hover:not(:disabled) { background: none; text-decoration: underline; text-underline-offset: 3px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
   .note { font-size: 14px; color: var(--muted); }
-  footer { margin-top: 40px; font-size: 13px; color: var(--muted); }
+  footer { margin-top: 48px; font-size: 13px; color: var(--faint); display: flex; align-items: center; gap: 8px; }
   .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px;
-    margin-bottom: 28px; font-size: 14px; color: var(--muted); }
-  .topbar a { color: var(--accent); text-decoration: none; font-weight: 500; }
-  .topbar a:hover { text-decoration: underline; }
-  .topbar[hidden], .gate[hidden], #tool[hidden] { display: none; }
-  .gate { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; }
+    margin-bottom: 32px; font-size: 14px; color: var(--muted); }
+  .gate { padding: 28px; max-width: 520px; }
   .gate h2 { margin: 0 0 6px; font-size: 18px; }
   .gate p { margin: 0 0 20px; color: var(--muted); }
-  .gate a.button { display: inline-block; font-weight: 600; border-radius: 8px; padding: 12px 20px;
+  .gate a.button { display: inline-block; font-weight: 600; border-radius: var(--radius-sm); padding: 12px 20px;
     background: var(--accent); color: var(--accent-ink); text-decoration: none; }
+
+  /* Configuración de la plantilla */
+  .config-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .config-body { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 24px; margin-top: 20px;
+    padding-top: 20px; border-top: 1px solid var(--line); }
+  .config-body > div { min-width: 0; }
+  @media (max-width: 780px) { .config-body { grid-template-columns: minmax(0, 1fr); } }
+  .field-group + .field-group { margin-top: 16px; }
+  .field-group h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--faint); letter-spacing: .02em; }
+  .field-group h3 code { font: 600 12px ui-monospace, Menlo, monospace; color: var(--muted); }
+  .fields { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .field { display: grid; grid-template-columns: 10px 1fr auto; gap: 4px 10px; align-items: baseline;
+    padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 14px; transition: background .15s var(--ease); }
+  .field:hover { background: var(--sunken); }
+  .field.active { background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; background: hsl(var(--h) 65% var(--mark-l)); align-self: center; }
+  .field .name { font-weight: 500; line-height: 1.35; }
+  .field .val { font: 600 13px ui-monospace, Menlo, monospace; white-space: nowrap; }
+  .field .val.none { font: 600 12px system-ui, sans-serif; color: var(--warn); background: var(--warn-soft); padding: 2px 7px; border-radius: 999px; }
+  .field .val.later { font: 500 12px system-ui, sans-serif; color: var(--faint); }
+  .field .origin { grid-column: 2 / 4; font-size: 12px; color: var(--faint); margin-top: -2px; }
+  .field .origin.usuario { color: var(--accent); }
+  .field .more { grid-column: 2 / 4; font-size: 13px; line-height: 1.45; color: var(--muted); margin-top: 4px; display: none; }
+  .field.active .more { display: block; }
+  .config-actions { display: flex; gap: 8px 14px; flex-wrap: wrap; margin-top: 18px; align-items: center; }
+  .viewer-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tabs { display: inline-flex; gap: 2px; padding: 3px; background: var(--sunken); border-radius: 9px; }
+  .tabs button { background: none; color: var(--muted); border-radius: 6px; padding: 5px 12px; font: 600 12.5px ui-monospace, Menlo, monospace; }
+  .tabs button:hover:not(:disabled) { background: none; color: var(--ink); }
+  .tabs button.on, .tabs button.on:hover:not(:disabled) { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+  .pick-hint { font-size: 13.5px; color: var(--muted); margin: 0; display: flex; align-items: center; gap: 8px; }
+  .pick-hint b { color: var(--ink); font-weight: 600; }
+  .pick-hint .swatch { flex: none; }
+  .grid-wrap { position: relative; overflow: auto; max-height: 480px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--surface); overscroll-behavior: contain; }
+  table.grid { border-collapse: separate; border-spacing: 0; font-size: 12px; }
+  table.grid th { position: sticky; background: var(--sunken); color: var(--faint); font-weight: 500; font-size: 11px;
+    padding: 3px 6px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); z-index: 2; }
+  table.grid thead th { top: 0; }
+  table.grid tbody th { left: 0; text-align: right; min-width: 34px; font-variant-numeric: tabular-nums; }
+  table.grid thead th:first-child { left: 0; z-index: 3; }
+  table.grid td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 3px 6px;
+    min-width: 46px; max-width: 150px; height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
+  .picking table.grid td { cursor: cell; }
+  .picking table.grid td:hover { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+  td.mark { box-shadow: inset 0 0 0 2px hsl(var(--h) 65% var(--mark-l)); background: hsl(var(--h) 80% 50% / var(--mark-bg-a)); }
+  td.band { background: hsl(var(--h) 80% 50% / var(--mark-bg-a)); }
+  /* La celda del dato activo lleva el borde punteado animado de Excel al copiar. */
+  td.ants { box-shadow: none; background-color: hsl(var(--h) 80% 50% / var(--mark-bg-a));
+    background-image:
+      linear-gradient(90deg, hsl(var(--h) 65% var(--mark-l)) 50%, transparent 50%),
+      linear-gradient(90deg, hsl(var(--h) 65% var(--mark-l)) 50%, transparent 50%),
+      linear-gradient(0deg, hsl(var(--h) 65% var(--mark-l)) 50%, transparent 50%),
+      linear-gradient(0deg, hsl(var(--h) 65% var(--mark-l)) 50%, transparent 50%);
+    background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+    background-size: 8px 2px, 8px 2px, 2px 8px, 2px 8px;
+    background-position: 0 0, 0 100%, 0 0, 100% 0;
+    animation: ants .6s linear infinite; }
+  @keyframes ants { to { background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px; } }
+  .tag { position: absolute; top: 2px; left: 2px; font: 700 9.5px/1 system-ui, sans-serif; padding: 2px 4px; border-radius: 3px;
+    background: hsl(var(--h) 65% var(--mark-l)); color: var(--tag-ink); pointer-events: none; }
+  .empty-view { padding: 40px 24px; color: var(--muted); font-size: 14px; text-align: center; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-sheet" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 13h8M8 17h8M12 11v8"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><path d="M6 12h.01M12 12h.01M18 12h.01"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M6 3l12 9-5.5 1L10 19z"/></symbol>
+</svg>
 <main>
   <nav class="topbar" id="topbar" hidden>
     <a href="/">← electroestudio</a>
     <span id="user"></span>
   </nav>
-  <h1>PyMetrados</h1>
-  <p class="lead">Genera el metrado a partir de tu base de datos y tu planilla. No necesitas Excel instalado.</p>
+  <header class="intro">
+    <div>
+      <h1>PyMetrados</h1>
+      <p class="lead">Genera el metrado a partir de tu base de datos y tu planilla. No necesitas Excel instalado.</p>
+    </div>
+    <div class="examples">
+      <span>¿Primera vez? Prueba con los ejemplos:</span>
+      <a href="ejemplos/BD-ejemplo.xlsx" download><svg class="i"><use href="#i-download"/></svg>BD</a>
+      <a href="ejemplos/Planilla-ejemplo.xlsx" download><svg class="i"><use href="#i-download"/></svg>Planilla</a>
+    </div>
+  </header>
 
-  <section class="gate" id="gate" hidden>
+  <section class="gate card" id="gate" hidden>
     <h2 id="gate-title">Inicia sesión para continuar</h2>
     <p id="gate-text">PyMetrados usa tu cuenta de electroestudio.com.</p>
     <a class="button" id="gate-link" href="/">Iniciar sesión en electroestudio</a>
@@ -93,45 +274,111 @@
 
   <div id="tool" hidden>
   <div class="drops">
-    <label class="drop" id="drop-bd">
-      <input type="file" accept=".xlsx,.xlsm" data-key="bd">
-      <div class="step">Paso 1</div>
-      <div class="title">Base de datos (BD)</div>
-      <div class="sheets">Hojas: General · Configuracion · P_0 · M_0</div>
-      <div class="file"></div>
-    </label>
-    <label class="drop" id="drop-planilla">
-      <input type="file" accept=".xlsx,.xlsm" data-key="planilla">
-      <div class="step">Paso 2</div>
-      <div class="title">Planilla</div>
-      <div class="sheets">Hojas: DB · PLANILLA</div>
-      <div class="file"></div>
-    </label>
+    <div>
+      <div class="step-label"><span class="step-num" id="num-bd">1</span><h2>Base de datos (BD)</h2></div>
+      <label class="drop" id="drop-bd">
+        <input type="file" accept=".xlsx,.xlsm" data-key="bd" aria-label="Elegir el archivo de la base de datos (BD)">
+        <div class="drop-head">
+          <span class="drop-icon"><svg class="i"><use href="#i-sheet"/></svg></span>
+          <div>
+            <div class="drop-title">Libro con las plantillas</div>
+            <div class="sheets"><span class="sheet">General</span><span class="sheet">P_0</span><span class="sheet">M_0</span><span class="sheet opt">Configuracion · opcional</span></div>
+          </div>
+          <span class="pill"></span>
+        </div>
+        <div class="file-row"></div>
+        <ul class="checks" id="checks-bd" aria-live="polite"></ul>
+      </label>
+    </div>
+    <div>
+      <div class="step-label"><span class="step-num" id="num-planilla">2</span><h2>Planilla</h2></div>
+      <label class="drop" id="drop-planilla">
+        <input type="file" accept=".xlsx,.xlsm" data-key="planilla" aria-label="Elegir el archivo de la planilla">
+        <div class="drop-head">
+          <span class="drop-icon"><svg class="i"><use href="#i-table"/></svg></span>
+          <div>
+            <div class="drop-title">Elementos por localidad</div>
+            <div class="sheets"><span class="sheet">DB</span><span class="sheet">PLANILLA</span></div>
+          </div>
+          <span class="pill"></span>
+        </div>
+        <div class="file-row"></div>
+        <ul class="checks" id="checks-planilla" aria-live="polite"></ul>
+      </label>
+    </div>
   </div>
 
-  <section class="panel" id="panel" hidden>
-    <div class="status" id="status"><span class="dot"></span><span id="status-text"></span></div>
-    <div class="stats" id="stats"></div>
-    <ul class="issues" id="errors"></ul>
-    <details id="warnings-box" hidden><summary id="warnings-title"></summary><ul class="issues" id="warnings"></ul></details>
-    <details id="detail-box" hidden><summary>Ver filas por localidad</summary>
-      <table><thead><tr><th>ID</th><th>Localidad</th><th class="num">Filas</th></tr></thead><tbody id="detail"></tbody></table>
-    </details>
-    <div class="actions">
-      <button id="generate" disabled>Generar Metrado.xlsx</button>
-      <span class="note" id="note"></span>
+  <section class="section" id="config" hidden>
+    <div class="step-label"><span class="step-num" id="num-config">3</span><h2>Configuración de la plantilla</h2></div>
+    <div class="card">
+      <div class="config-head">
+        <p class="summary-line" id="config-summary"></p>
+        <button class="secondary" id="config-toggle" aria-expanded="false" aria-controls="config-body">Ver plantilla</button>
+      </div>
+      <div class="config-body" id="config-body" hidden>
+        <div>
+          <div id="fields"></div>
+          <div class="config-actions">
+            <button class="secondary" id="download-bd"><svg class="i"><use href="#i-download"/></svg>Descargar BD configurada</button>
+            <button class="link" id="reset" hidden>Deshacer mis cambios</button>
+          </div>
+          <p class="note" id="config-note" aria-live="polite"></p>
+        </div>
+        <div>
+          <div class="viewer-bar">
+            <div class="tabs" id="tabs" role="tablist" aria-label="Hoja"></div>
+            <p class="pick-hint" id="pick-hint"></p>
+          </div>
+          <div class="grid-wrap" id="grid-wrap"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="panel" hidden>
+    <div class="step-label"><span class="step-num" id="num-generate">4</span><h2>Generar el metrado</h2></div>
+    <div class="card">
+      <div class="result-head">
+        <div>
+          <div class="status" id="status" role="status"><span class="dot"></span><span id="status-text"></span></div>
+          <div class="stats" id="stats"></div>
+        </div>
+        <div class="actions">
+          <button class="big" id="generate" disabled><svg class="i"><use href="#i-download"/></svg><span>Generar Metrado.xlsx</span></button>
+          <span class="note" id="note" aria-live="polite"></span>
+        </div>
+      </div>
+      <ul class="issues" id="errors"></ul>
+      <details id="warnings-box" hidden><summary id="warnings-title"></summary><ul class="issues" id="warnings"></ul></details>
+      <details id="detail-box" hidden><summary>Ver filas por localidad</summary>
+        <table class="detail"><thead><tr><th>ID</th><th>Localidad</th><th class="num">Filas</th></tr></thead><tbody id="detail"></tbody></table>
+      </details>
     </div>
   </section>
 
   </div>
 
-  <footer>Los archivos se procesan en el servidor y no se guardan.</footer>
+  <footer><svg class="i"><use href="#i-lock"/></svg>Los archivos se procesan en el servidor y no se guardan.</footer>
 </main>
 
 <script>
 const files = { bd: null, planilla: null };
 const $ = (id) => document.getElementById(id);
 let validating = 0;
+
+// Configuración elegida en la página (clave → valor). Manda sobre la hoja
+// Configuracion y se recuerda por plantilla (firma que da el servidor).
+let overrides = {};
+let firma = null;
+let restored = false;
+let report = null;
+let activeField = null;
+let tab = "P_0";
+let configOpen = false;
+
+const HUES = { nombre: 12, codigo: 38, sistema: 140, ubicacion: 200, primeraFila: 265, cantidad: 315, filaMetrado: 175, celdaResumen: 55, ultimaColumna: 225 };
+const SHORT = { nombre: "Nombre", codigo: "Código", sistema: "Sistema", ubicacion: "Ubicación", primeraFila: "1.er dato", cantidad: "Cantidad", filaMetrado: "Localidad", celdaResumen: "Resumen", ultimaColumna: "Última" };
+const ORIGIN = { configuracion: "de la hoja Configuracion", detectado: "detectado", usuario: "elegido por ti" };
 
 // Sesión: el login es el de electroestudio.com (Neon Auth). La página pide un
 // JWT a Neon Auth y lo envía a la API; dura 15 minutos, así que se pide uno
@@ -171,13 +418,17 @@ async function authHeaders() {
   return { Authorization: `Bearer ${token}` };
 }
 
-async function api(path) {
+// Los archivos van juntos como binario (la BD y luego la planilla, con el
+// tamaño de la BD en X-Tamano-Bd): en Vercel un multipart tarda ~3 veces más.
+async function api(path, which = files) {
   const headers = await authHeaders();
   if (!headers) return null;
+  const extra = { "Content-Type": "application/octet-stream", "X-Tamano-Bd": String(which.bd ? which.bd.size : 0) };
+  if (Object.keys(overrides).length) extra["X-Configuracion"] = encodeURIComponent(JSON.stringify(overrides));
   const res = await fetch(path, {
     method: "POST",
-    body: body(),
-    headers: { ...headers, "Content-Type": "application/octet-stream", "X-Tamano-Bd": String(files.bd.size) },
+    body: new Blob([which.bd || new Blob(), which.planilla || new Blob()], { type: "application/octet-stream" }),
+    headers: { ...headers, ...extra },
   });
   if (res.status === 401) {
     showGate("Tu sesión terminó", "Vuelve a iniciar sesión en electroestudio.com para seguir usando PyMetrados.");
@@ -217,30 +468,89 @@ function setStatus(kind, text) {
   $("status-text").textContent = text;
 }
 
-// Los dos archivos van juntos como binario (la BD y luego la planilla, con el
-// tamaño de la BD en X-Tamano-Bd): en Vercel un multipart tarda ~3 veces más.
-function body() {
-  return new Blob([files.bd, files.planilla], { type: "application/octet-stream" });
+/* ---------- Memoria de la configuración por plantilla ---------- */
+
+function storeKey() { return firma ? "pymetrados.config." + firma : null; }
+
+function loadStored() {
+  try { return JSON.parse(localStorage.getItem(storeKey()) || "{}") || {}; } catch { return {}; }
 }
+
+function saveStored() {
+  if (!storeKey()) return;
+  try {
+    if (Object.keys(overrides).length) localStorage.setItem(storeKey(), JSON.stringify(overrides));
+    else localStorage.removeItem(storeKey());
+  } catch {}
+}
+
+/* ---------- Revisión por archivo ---------- */
+
+const ICONS = { ok: "i-check", info: "i-info", pendiente: "i-alert", error: "i-x", warning: "i-alert", busy: "i-dots" };
+const icon = (name) => `<svg class="i" aria-hidden="true"><use href="#${ICONS[name] || name}"/></svg>`;
+const PILL = { ok: "Listo", error: "Revisar", pendiente: "Falta configurar", busy: "Revisando…" };
+
+function formatSize(bytes) {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1).replace(".", ",")} MB`;
+}
+
+// Estado de cada tarjeta de archivo: nombre, píldora de estado y lo que se encontró.
+function renderChecks(key, rep, busy) {
+  const el = $("checks-" + key);
+  const drop = $("drop-" + key);
+  const file = files[key];
+  drop.querySelector(".file-row").innerHTML = file
+    ? `<span class="file-name">${esc(file.name)}</span><span class="file-size">${formatSize(file.size)}</span><span class="file-change">Cambiar</span>`
+    : `<span class="file-cta"><b>Elige el archivo</b> o arrástralo aquí (.xlsx)</span>`;
+  let state = "";
+  let items = [];
+  if (file && busy) {
+    state = "busy";
+    items = [{ nivel: "busy", texto: "Revisando el archivo…" }];
+  } else if (file && rep) {
+    const label = key === "bd" ? "BD" : "Planilla";
+    items = (rep.checks || []).filter((c) => c.archivo === key).map((c) => ({ nivel: c.nivel, texto: c.texto }));
+    // La configuración incompleta ya aparece como pendiente: no repetirla como error.
+    const pending = items.some((i) => i.nivel === "pendiente");
+    const errors = (rep.errors || []).filter((e) => (e.where || "").startsWith(label) && !(pending && e.message.startsWith("Falta indicar")));
+    if (errors.length) items.push({ nivel: "error", texto: errors.length === 1 ? errors[0].message : `${errors.length} problemas: revísalos en el paso 4.` });
+    state = errors.length ? "error" : pending ? "pendiente" : items.length ? "ok" : "";
+  }
+  drop.dataset.state = state;
+  drop.querySelector(".pill").textContent = PILL[state] || "";
+  const num = $("num-" + key);
+  num.className = "step-num" + (state === "ok" ? " done" : state === "error" || state === "pendiente" ? " attn" : "");
+  num.innerHTML = state === "ok" ? icon("ok") : key === "bd" ? "1" : "2";
+  el.innerHTML = items.map((i) => `<li class="${i.nivel}">${icon(i.nivel)}<span>${esc(i.texto)}</span></li>`).join("");
+}
+
+/* ---------- Resultado ---------- */
 
 function renderIssues(list, el) {
   el.innerHTML = list.map((i) => `
-    <li class="issue ${i.level}">
+    <li class="issue ${i.level}">${icon(i.level === "error" ? "error" : "warning")}<div>
       ${i.where ? `<div class="where">${esc(i.where)}</div>` : ""}
       <div>${esc(i.message)}</div>
       ${i.hint ? `<div class="hint">${esc(i.hint)}</div>` : ""}
-    </li>`).join("");
+    </div></li>`).join("");
 }
 
-function render(report) {
-  const { ok, errors, warnings, summary } = report;
+function render(rep) {
+  report = rep;
+  const { ok, errors, warnings, summary } = rep;
+  const missing = !files.bd ? "la BD" : !files.planilla ? "la planilla" : null;
   if (ok) setStatus("ok", "Archivos listos para generar el metrado");
-  else setStatus("bad", errors.length === 1 ? "Hay 1 problema que corregir" : `Hay ${errors.length} problemas que corregir`);
+  else if (errors.length) setStatus("bad", errors.length === 1 ? "Hay 1 problema que corregir" : `Hay ${errors.length} problemas que corregir`);
+  else if (missing) setStatus("", `Sube ${missing} para continuar`);
+  else setStatus("bad", "No se pudo revisar los archivos");
 
   $("stats").innerHTML = summary && summary.localidades != null ? `
-    <div class="stat"><b>${summary.localidades}</b><span>localidades</span></div>
+    <div class="stat"><b>${summary.localidades}</b><span>${summary.localidades === 1 ? "localidad" : "localidades"}</span></div>
     <div class="stat"><b>${summary.filas}</b><span>filas de planilla</span></div>
     <div class="stat"><b>${summary.columnas}</b><span>columnas</span></div>` : "";
+  const gen = $("num-generate");
+  gen.className = "step-num" + (ok ? " done" : "");
+  gen.innerHTML = ok ? icon("ok") : "4";
 
   renderIssues(errors, $("errors"));
   $("warnings-box").hidden = !warnings.length;
@@ -254,73 +564,302 @@ function render(report) {
     `<tr><td>${esc(d.id)}</td><td>${esc(d.nombre)}</td><td class="num">${d.filas}</td></tr>`).join("");
 
   $("generate").disabled = !ok;
-  $("note").textContent = ok ? "" : "Corrige los archivos y vuelve a subirlos.";
+  $("note").textContent = ok || missing ? "" : "Corrige los archivos y vuelve a subirlos.";
+  renderChecks("bd", rep);
+  renderChecks("planilla", rep);
+  renderConfig();
 }
+
+/* ---------- Configuración de la plantilla ---------- */
+
+function fields() { return (report && report.config) || []; }
+
+function fieldDone(f) { return !!f.valor; }
+
+function renderConfig() {
+  const list = fields();
+  $("config").hidden = !list.length;
+  if (!list.length) return;
+  const pending = list.filter((f) => !fieldDone(f) && !(f.clave === "ultimaColumna" && !files.planilla));
+  const fromSheet = list.every((f) => f.origen === "configuracion" || (!f.valor && f.clave === "ultimaColumna"));
+  const summaryEl = $("config-summary");
+  summaryEl.classList.toggle("attn", !!pending.length);
+  const num = $("num-config");
+  num.className = "step-num" + (pending.length ? " attn" : " done");
+  num.innerHTML = pending.length ? "3" : icon("ok");
+  if (pending.length) {
+    $("config-summary").textContent = pending.length === 1
+      ? `Falta indicar «${pending[0].titulo}». Elígelo con un clic en la plantilla.`
+      : `Faltan ${pending.length} datos que no se pudieron detectar. Elígelos con un clic en la plantilla.`;
+    if (!configOpen) { configOpen = true; activeField = pending[0].clave; tab = pending[0].hoja; }
+  } else if (fromSheet) {
+    $("config-summary").textContent = "Tomada de la hoja Configuracion de tu BD. Ábrela para ver qué hace cada celda.";
+  } else {
+    const n = list.filter((f) => f.origen === "detectado").length;
+    $("config-summary").textContent = n
+      ? `Completa. ${n === 1 ? "1 dato se detectó" : n + " datos se detectaron"} automáticamente: revisa que estén bien.`
+      : "Completa.";
+  }
+  if (activeField && !list.some((f) => f.clave === activeField)) activeField = null;
+  $("config-body").hidden = !configOpen;
+  $("config-toggle").textContent = configOpen ? "Ocultar plantilla" : "Ver plantilla";
+  $("config-toggle").setAttribute("aria-expanded", String(configOpen));
+  $("reset").hidden = !Object.keys(overrides).length;
+  $("download-bd").disabled = !!list.filter((f) => !fieldDone(f) && f.clave !== "ultimaColumna").length;
+  if (!configOpen) return;
+
+  // Lista agrupada por hoja, en el mismo orden que las pestañas.
+  const fieldHTML = (f) => {
+    const later = f.clave === "ultimaColumna" && !files.planilla;
+    const value = f.valor
+      ? `<span class="val">${esc(f.tipo === "fila" ? "fila " + f.valor : f.tipo === "columna" ? "col. " + f.valor : f.valor)}</span>`
+      : later ? `<span class="val later">con la planilla</span>` : `<span class="val none">falta</span>`;
+    const origin = f.valor ? `<div class="origin ${f.origen}">${esc(ORIGIN[f.origen] || "")}</div>` : "";
+    const on = activeField === f.clave;
+    return `<li class="field ${on ? "active" : ""}" data-key="${f.clave}" style="--h:${HUES[f.clave]}" role="button" tabindex="0" aria-pressed="${on}">
+      <span class="swatch"></span><span class="name">${esc(f.titulo)}</span>${value}${origin}
+      <div class="more">${esc(f.ayuda)}${f.detalle ? " " + esc(f.detalle) : ""}</div>
+    </li>`;
+  };
+  $("fields").innerHTML = ["P_0", "M_0", "PLANILLA"].map((sheet) => {
+    const group = list.filter((f) => f.hoja === sheet);
+    return group.length ? `<div class="field-group"><h3>En <code>${sheet}</code></h3><ul class="fields">${group.map(fieldHTML).join("")}</ul></div>` : "";
+  }).join("");
+
+  const vistas = report.vistas || {};
+  $("tabs").innerHTML = ["P_0", "M_0", "PLANILLA"].map((t) =>
+    `<button role="tab" aria-selected="${t === tab}" class="${t === tab ? "on" : ""}" data-tab="${t}">${t}</button>`).join("");
+
+  const active = list.find((f) => f.clave === activeField);
+  const hint = $("pick-hint");
+  const sw = active ? `<span class="swatch" style="--h:${HUES[active.clave]}"></span>` : "";
+  if (active && active.hoja === tab) {
+    const what = active.tipo === "fila" ? "cualquier celda de la fila" : active.tipo === "columna" ? "cualquier celda de la columna" : "la celda";
+    hint.innerHTML = `${sw}<span>Haz clic en ${what} de <b>${esc(active.titulo.toLowerCase())}</b></span>`;
+  } else if (active) {
+    hint.innerHTML = `${sw}<span>«${esc(active.titulo)}» está en la hoja <b>${esc(active.hoja)}</b></span>`;
+  } else {
+    hint.textContent = "Elige un dato de la lista para verlo o cambiarlo.";
+  }
+  $("grid-wrap").classList.toggle("picking", !!(active && active.hoja === tab));
+  const vista = vistas[tab];
+  if (!vista) {
+    $("grid-wrap").innerHTML = `<div class="empty-view">${tab === "PLANILLA" ? "Sube la planilla para ver sus columnas." : "No se pudo leer esta hoja."}</div>`;
+    return;
+  }
+  $("grid-wrap").innerHTML = gridHTML(vista, list.filter((f) => f.hoja === tab && f.valor), activeField);
+  scrollToField(active);
+}
+
+function colName(n) {
+  let s = "";
+  for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
+  return s;
+}
+
+function parseCell(ref) {
+  const m = /^([A-Z]+)(\d+)$/.exec(ref);
+  if (!m) return null;
+  let col = 0;
+  for (const ch of m[1]) col = col * 26 + ch.charCodeAt(0) - 64;
+  return { col, row: +m[2] };
+}
+
+function gridHTML(vista, marks, activeKey) {
+  // Celdas combinadas: la principal lleva rowspan/colspan, las demás se omiten.
+  const span = {}, covered = {};
+  for (const range of vista.combinadas) {
+    const [a, b] = range.split(":").map(parseCell);
+    const r2 = Math.min(b.row, vista.filas), c2 = Math.min(b.col, vista.columnas);
+    span[colName(a.col) + a.row] = { rows: r2 - a.row + 1, cols: c2 - a.col + 1 };
+    for (let r = a.row; r <= r2; r++) for (let c = a.col; c <= c2; c++)
+      if (r !== a.row || c !== a.col) covered[colName(c) + r] = colName(a.col) + a.row;
+  }
+  const masterOf = (ref) => covered[ref] || ref;
+  const cellMarks = {}, rowMarks = {}, colMarks = {};
+  for (const f of marks) {
+    if (f.tipo === "fila") rowMarks[+f.valor] = f;
+    else if (f.tipo === "columna") colMarks[parseCell(f.valor + "1").col] = f;
+    else (cellMarks[masterOf(f.valor)] ||= []).push(f);
+  }
+  let html = `<table class="grid"><thead><tr><th></th>`;
+  for (let c = 1; c <= vista.columnas; c++) html += `<th>${colName(c)}</th>`;
+  html += `</tr></thead><tbody>`;
+  for (let r = 1; r <= vista.filas; r++) {
+    html += `<tr><th>${r}</th>`;
+    for (let c = 1; c <= vista.columnas; c++) {
+      const ref = colName(c) + r;
+      if (covered[ref]) continue;
+      const s = span[ref];
+      const attrs = s ? `${s.rows > 1 ? ` rowspan="${s.rows}"` : ""}${s.cols > 1 ? ` colspan="${s.cols}"` : ""}` : "";
+      const text = vista.celdas[ref] || "";
+      const mine = cellMarks[ref] || [];
+      const band = mine.length ? null : rowMarks[r] || colMarks[c];
+      let cls = "", style = "", tag = "";
+      if (mine.length) {
+        const lead = mine.find((f) => f.clave === activeKey) || mine[0];
+        cls = lead.clave === activeKey ? "mark ants" : "mark"; style = `--h:${HUES[lead.clave]}`;
+        tag = `<span class="tag">${esc(mine.map((f) => SHORT[f.clave]).join(" · "))}</span>`;
+      } else if (band) {
+        cls = "band"; style = `--h:${HUES[band.clave]}`;
+        const first = band.tipo === "fila" ? c === 1 : r === 1;
+        if (first) { cls = "mark"; tag = `<span class="tag">${esc(SHORT[band.clave])}</span>`; }
+      }
+      html += `<td data-cell="${ref}"${attrs}${cls ? ` class="${cls}"` : ""}${style ? ` style="${style}"` : ""} title="${esc(ref + (text ? ": " + text : ""))}">${esc(text)}${tag}</td>`;
+    }
+    html += `</tr>`;
+  }
+  return html + `</tbody></table>`;
+}
+
+function scrollToField(f) {
+  if (!f || !f.valor || f.hoja !== tab) return;
+  const ref = f.tipo === "fila" ? "A" + f.valor : f.tipo === "columna" ? f.valor + "1" : f.valor;
+  const wrap = $("grid-wrap");
+  const cell = wrap.querySelector(`td[data-cell="${ref}"]`);
+  if (!cell) return;
+  wrap.scrollTop = Math.max(0, cell.offsetTop - wrap.clientHeight / 2);
+  wrap.scrollLeft = Math.max(0, cell.offsetLeft - wrap.clientWidth / 2);
+}
+
+function pickCell(ref) {
+  const f = fields().find((x) => x.clave === activeField);
+  if (!f || f.hoja !== tab) return;
+  const { col, row } = parseCell(ref);
+  if (f.clave === "primeraFila" && col < 2) {
+    $("pick-hint").textContent = "Los datos no pueden empezar en la columna A: elige una celda desde la columna B.";
+    return;
+  }
+  const value = f.tipo === "fila" ? String(row) : f.tipo === "columna" ? colName(col) : ref;
+  overrides[f.clave] = value;
+  Object.assign(f, { valor: value, origen: "usuario", detalle: "" });
+  saveStored();
+  // Pasar al siguiente dato que falte, para elegirlos seguidos.
+  const next = fields().find((x) => !fieldDone(x) && !(x.clave === "ultimaColumna" && !files.planilla));
+  activeField = next ? next.clave : f.clave;
+  if (next) tab = next.hoja;
+  renderConfig();
+  scheduleValidate();
+}
+
+let validateTimer = null;
+function scheduleValidate() {
+  clearTimeout(validateTimer);
+  validateTimer = setTimeout(validate, 350);
+}
+
+/* ---------- Llamadas ---------- */
 
 async function readError(res) {
   try { return await res.json(); }
-  catch { return { ok: false, errors: [{ level: "error", message: `El servidor respondió con un error (${res.status}).` }], warnings: [], summary: {} }; }
+  catch { return { ok: false, errors: [{ level: "error", message: `El servidor respondió con un error (${res.status}).` }], warnings: [], summary: {}, checks: [] }; }
 }
 
 // Vercel acepta como máximo 4,5 MB por petición.
 const MAX_BYTES = 4 * 1024 * 1024;
 
 async function validate() {
-  if (!files.bd || !files.planilla) return;
+  if (!files.bd && !files.planilla) return;
   const run = ++validating;
-  if (files.bd.size + files.planilla.size > MAX_BYTES) {
-    $("panel").hidden = false;
-    render({ ok: false, warnings: [], summary: null, errors: [{
+  $("panel").hidden = false;
+  if ((files.bd ? files.bd.size : 0) + (files.planilla ? files.planilla.size : 0) > MAX_BYTES) {
+    render({ ok: false, warnings: [], summary: null, checks: [], errors: [{
       level: "error",
       message: "Entre los dos archivos superan los 4 MB permitidos.",
       hint: "Quita hojas o filas que no se usen (por ejemplo, filas de relleno al final de la planilla) y vuelve a subirlos.",
     }] });
     return;
   }
-  $("panel").hidden = false;
   $("generate").disabled = true;
   setStatus("busy", "Revisando archivos…");
-  $("stats").innerHTML = $("errors").innerHTML = $("note").textContent = "";
-  $("warnings-box").hidden = $("detail-box").hidden = true;
+  for (const key of ["bd", "planilla"]) if (!report || !(report.checks || []).some((c) => c.archivo === key)) renderChecks(key, null, true);
   try {
     const res = await api("api/validate");
-    if (!res) return;
-    const report = res.ok ? await res.json() : await readError(res);
-    if (run === validating) render(report);
+    if (!res || run !== validating) return;
+    const rep = res.ok ? await res.json() : await readError(res);
+    if (run !== validating) return;
+    // Primera revisión de esta BD: recuperar lo que se eligió antes con la misma plantilla.
+    if (rep.firma && !restored) {
+      restored = true;
+      firma = rep.firma;
+      const stored = loadStored();
+      if (Object.keys(stored).length) {
+        overrides = stored;
+        $("config-note").textContent = "Se recuperó la configuración que elegiste antes para esta plantilla.";
+        return validate();
+      }
+    }
+    render(rep);
   } catch {
     if (run === validating) setStatus("bad", "No se pudo conectar con el servidor. Intenta de nuevo.");
   }
 }
 
+async function download(res, name) {
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 async function generate() {
   const btn = $("generate");
   btn.disabled = true;
-  btn.textContent = "Generando…";
+  btn.querySelector("span").textContent = "Generando…";
   $("note").textContent = "";
   try {
     const res = await api("api/generate");
     if (!res) return;
     if (!res.ok) { render(await readError(res)); return; }
-    const url = URL.createObjectURL(await res.blob());
-    const a = Object.assign(document.createElement("a"), { href: url, download: "Metrado.xlsx" });
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    await download(res, "Metrado.xlsx");
     $("note").textContent = "Descarga iniciada.";
     btn.disabled = false;
   } catch {
     $("note").textContent = "No se pudo conectar con el servidor. Intenta de nuevo.";
     btn.disabled = false;
   } finally {
-    btn.textContent = "Generar Metrado.xlsx";
+    btn.querySelector("span").textContent = "Generar Metrado.xlsx";
   }
 }
 
+async function downloadBD() {
+  const btn = $("download-bd");
+  const note = $("config-note");
+  btn.disabled = true;
+  note.textContent = "Preparando la BD…";
+  try {
+    const res = await api("api/configurar", { bd: files.bd, planilla: files.planilla });
+    if (!res) return;
+    if (!res.ok) {
+      const rep = await readError(res);
+      note.textContent = (rep.errors && rep.errors[0] && rep.errors[0].message) || "No se pudo preparar la BD.";
+      return;
+    }
+    const base = files.bd.name.replace(/\.(xlsx|xlsm)$/i, "");
+    await download(res, `${base} (configurada).xlsx`);
+    note.textContent = "Listo: la BD descargada ya trae la hoja Configuracion; la próxima vez no tendrás que elegir nada.";
+  } catch {
+    note.textContent = "No se pudo conectar con el servidor. Intenta de nuevo.";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ---------- Eventos ---------- */
+
 function pick(input, file) {
   if (!file) return;
+  const key = input.dataset.key;
   const drop = input.closest(".drop");
-  files[input.dataset.key] = file;
+  files[key] = file;
+  if (key === "bd") {
+    overrides = {}; firma = null; restored = false; configOpen = false; activeField = null;
+    $("config-note").textContent = "";
+    report = report && { ...report, checks: (report.checks || []).filter((c) => c.archivo !== "bd") };
+  } else if (report) {
+    report = { ...report, checks: (report.checks || []).filter((c) => c.archivo !== "planilla") };
+  }
   drop.classList.add("filled");
-  drop.querySelector(".file").textContent = file.name;
   validate();
 }
 
@@ -335,7 +874,43 @@ document.querySelectorAll(".drop input").forEach((input) => {
     pick(input, e.dataTransfer.files[0]);
   });
 });
+
+$("config-toggle").addEventListener("click", () => {
+  configOpen = !configOpen;
+  renderConfig();
+});
+$("fields").addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.closest(".field")) { e.preventDefault(); e.target.click(); }
+});
+$("fields").addEventListener("click", (e) => {
+  const li = e.target.closest(".field");
+  if (!li) return;
+  activeField = li.dataset.key;
+  tab = fields().find((f) => f.clave === activeField).hoja;
+  renderConfig();
+  // En pantallas angostas la plantilla queda debajo de la lista: llevarla a la vista.
+  if (matchMedia("(max-width: 780px)").matches) $("grid-wrap").scrollIntoView({ block: "center", behavior: "smooth" });
+});
+$("tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-tab]");
+  if (!b) return;
+  tab = b.dataset.tab;
+  renderConfig();
+});
+$("grid-wrap").addEventListener("click", (e) => {
+  const td = e.target.closest("td[data-cell]");
+  if (td) pickCell(td.dataset.cell);
+});
+$("reset").addEventListener("click", () => {
+  overrides = {};
+  saveStored();
+  $("config-note").textContent = "";
+  validate();
+});
+$("download-bd").addEventListener("click", downloadBD);
 $("generate").addEventListener("click", generate);
+renderChecks("bd");
+renderChecks("planilla");
 start();
 </script>
 </body>
