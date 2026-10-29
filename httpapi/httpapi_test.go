@@ -189,8 +189,15 @@ func TestEnvioBinario(t *testing.T) {
 	if code, out := callBinario(t, Validate, bd, []byte("x"), ""); code != http.StatusBadRequest || !strings.Contains(firstError(out), "tamaño") {
 		t.Fatalf("sin cabecera: %d %v", code, out)
 	}
-	if code, out := callBinario(t, Validate, bd, nil, fmt.Sprint(len(bd))); code != http.StatusBadRequest || firstError(out) != "El archivo Planilla está vacío." {
-		t.Fatalf("sin planilla: %d %v", code, out)
+	if code, out := callBinario(t, Generate, bd, nil, fmt.Sprint(len(bd))); code != http.StatusBadRequest || firstError(out) != "Falta el archivo Planilla." {
+		t.Fatalf("generar sin planilla: %d %v", code, out)
+	}
+	// Validar acepta un solo archivo: la página revisa cada uno apenas se sube.
+	if code, out := callBinario(t, Validate, bd, nil, fmt.Sprint(len(bd))); code != http.StatusOK || !strings.Contains(firstError(out), "archivo BD") {
+		t.Fatalf("validar solo la BD: %d %v", code, out)
+	}
+	if code, out := callBinario(t, Validate, nil, nil, "0"); code != http.StatusBadRequest || firstError(out) != "No llegó ningún archivo." {
+		t.Fatalf("sin archivos: %d %v", code, out)
 	}
 	big := bytes.Repeat([]byte("x"), MaxUploadBytes)
 	if code, _ := callBinario(t, Validate, big, []byte("x"), fmt.Sprint(len(big))); code != http.StatusRequestEntityTooLarge {

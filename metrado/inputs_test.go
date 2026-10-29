@@ -2,6 +2,7 @@ package metrado
 
 import (
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -103,6 +104,7 @@ func TestConfiguracionInvalidaIndicaCelda(t *testing.T) {
 	for _, e := range report.Errors {
 		where = append(where, e.Where)
 	}
+	sort.Strings(where)
 	want := []string{"BD › Configuracion!B6", "BD › Configuracion!B8"}
 	if !reflect.DeepEqual(where, want) {
 		t.Fatalf("where = %v", where)

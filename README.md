@@ -27,11 +27,30 @@ Sin `NEON_AUTH_URL` (y sin `METRADOS_SIN_ACCESO`) la API rechaza todo: nunca que
 
 ## Uso
 
-1. Sube la **BD** (hojas `General`, `Configuracion`, `P_0`, `M_0`).
-2. Sube la **Planilla** (hojas `DB`, `PLANILLA`).
-3. La página valida ambos archivos al instante y muestra cada problema con su ubicación
-   (por ejemplo `BD › Configuracion!B6`) y cómo corregirlo.
-4. Si no hay errores, pulsa **Generar Metrado.xlsx**.
+1. Sube la **BD** (hojas `General`, `P_0`, `M_0` y, si la tienes, `Configuracion`).
+2. Sube la Cada dato de configuración se toma, en este orden, de lo elegido en la página, de la hoja
+`Configuracion` o de una detección automática:
+
+| Dato | Cómo se detecta |
+|---|---|
+| Primera celda de datos y celda de cantidad | Fórmulas `OFFSET($O$15,0,0,$C$10)` de `P_0`; la columna, por el encabezado más a la izquierda justo arriba |
+| Fila del metrado y celda del Resumen | Encabezado `ITEM` de `M_0` (dos filas abajo de la fila del metrado) y la columna `METRADO` de ese encabezado, tres filas más abajo |
+| Última columna | Último encabezado de la fila 1 de `PLANILLA` |
+| Nombre, código, sistema y ubicación | No se detectan: son celdas combinadas y vacías; se eligen en la página |
+
+Si la hoja `Configuracion` contradice las fórmulas de `P_0`, la página lo advierte.
+
+**Planilla** (hojas `DB`, `PLANILLA`).
+3. Cada archivo se revisa apenas se sube: la página muestra lo que encontró (localidades,
+   columnas, dónde empiezan y terminan los datos, filas de relleno ignoradas) y cada problema
+   con su ubicación (por ejemplo `BD › Configuracion!B6`) y cómo corregirlo.
+4. En **Configuración de la plantilla** se ve P_0, M_0 y PLANILLA con cada celda configurada
+   resaltada. Lo que falta se elige con un clic; se puede descargar la BD con la hoja
+   `Configuracion` ya escrita para no repetirlo.
+5. Si no hay errores, pulsa **Generar Metrado.xlsx**.
+
+En la página hay una BD y una planilla de ejemplo para descargar (`public/ejemplos/`, los mismos
+archivos de la release v1.0).
 
 Entre los dos archivos pueden pesar hasta 4 MB (límite de Vercel por petición).
 
@@ -42,10 +61,22 @@ Entre los dos archivos pueden pesar hasta 4 MB (límite de Vercel por petición)
 | Hoja | Contenido |
 |---|---|
 | `General` | Desde la fila 2: A = ID, B = Nombre, C = Código, D = Sistema, E = Ubicación |
-| `Configuracion` | B2–B5: celdas de nombre, código, sistema y ubicación en `P_0`. B6: primera celda de datos en `P_0` (ej. `A15`). B7: celda de cantidad de elementos. B8: primera fila del metrado en `M_0`. B9: celda total de cada `M_` que va al Resumen. B10: última celda de encabezados de `PLANILLA` (ej. `AG1`) |
+| `Configuracion` (opcional) | B2–B5: celdas de nombre, código, sistema y ubicación en `P_0`. B6: celda a la izquierda del primer dato en `P_0` (ej. `A15`: los datos empiezan en B15). B7: celda de cantidad de elementos. B8: primera fila del metrado en `M_0`. B9: celda total de cada `M_` que va al Resumen. B10: última celda de encabezados de `PLANILLA` (ej. `AG1`) |
 | `P_0` | Plantilla de planilla por localidad |
 | `M_0` | Plantilla de metrado por localidad (columna I con las fórmulas por elemento) |
 | Otras (`DATOS`, `BD_LP`…) | Tablas que usan las plantillas; se copian tal cual al Metrado |
+
+Cada dato de configuración se toma, en este orden, de lo elegido en la página, de la hoja
+`Configuracion` o de una detección automática:
+
+| Dato | Cómo se detecta |
+|---|---|
+| Primera celda de datos y celda de cantidad | Fórmulas `OFFSET($O$15,0,0,$C$10)` de `P_0`; la columna, por el encabezado más a la izquierda justo arriba |
+| Fila del metrado y celda del Resumen | Encabezado `ITEM` de `M_0` (dos filas abajo de la fila del metrado) y la columna `METRADO` de ese encabezado, tres filas más abajo |
+| Última columna | Último encabezado de la fila 1 de `PLANILLA` |
+| Nombre, código, sistema y ubicación | No se detectan: son celdas combinadas y vacías; se eligen en la página |
+
+Si la hoja `Configuracion` contradice las fórmulas de `P_0`, la página lo advierte.
 
 **Planilla**
 

@@ -24,6 +24,7 @@ func main() {
 	mux.HandleFunc("/api/config", httpapi.Config)
 	mux.HandleFunc("/api/validate", httpapi.Validate)
 	mux.HandleFunc("/api/generate", httpapi.Generate)
+	mux.HandleFunc("/api/configurar", httpapi.Configurar)
 	mux.Handle("/", http.FileServer(http.Dir("public")))
 	log.Printf("PyMetrados en http://%s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux))

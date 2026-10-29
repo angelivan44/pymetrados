@@ -17,6 +17,7 @@ type bdOptions struct {
 	general    [][]any
 	config     map[string]any
 	withTables bool
+	sinConfig  bool // sin hoja Configuracion, con fórmulas OFFSET en P_0
 }
 
 func toBytes(t *testing.T, f *excelize.File) []byte {
@@ -54,7 +55,6 @@ func makeBD(t *testing.T, opts bdOptions) []byte {
 		must(t, f.SetSheetRow("General", fmt.Sprintf("A%d", i+2), &r))
 	}
 
-	_, _ = f.NewSheet("Configuracion")
 	config := map[string]any{
 		"B2": "C3", "B3": "C4", "B4": "C5", "B5": "C6", "B6": "A14",
 		"B7": "C8", "B8": firstRowMontaje, "B9": "G10", "B10": "C1",
@@ -62,8 +62,11 @@ func makeBD(t *testing.T, opts bdOptions) []byte {
 	for k, v := range opts.config {
 		config[k] = v
 	}
-	for addr, v := range config {
-		must(t, f.SetCellValue("Configuracion", addr, v))
+	if !opts.sinConfig {
+		_, _ = f.NewSheet("Configuracion")
+		for addr, v := range config {
+			must(t, f.SetCellValue("Configuracion", addr, v))
+		}
 	}
 
 	_, _ = f.NewSheet("P_0")
@@ -74,6 +77,10 @@ func makeBD(t *testing.T, opts bdOptions) []byte {
 	must(t, f.SetCellStyle("P_0", "A14", "A14", yellow))
 	must(t, f.SetCellValue("P_0", "B16", "TOTAL"))
 	must(t, f.SetCellFormula("P_0", "C16", "SUM(C14:C15)"))
+	if opts.sinConfig {
+		must(t, f.SetCellValue("P_0", "D16", 0))
+		must(t, f.SetCellFormula("P_0", "D16", "SUM(OFFSET($D$14,0,0,$C$8))"))
+	}
 	must(t, f.MergeCell("P_0", "A17", "B17"))
 	must(t, f.SetRowHeight("P_0", 16, 30))
 	bold, _ := f.NewConditionalStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})

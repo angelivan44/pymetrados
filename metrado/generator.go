@@ -361,7 +361,10 @@ func Generate(in *Inputs) ([]byte, error) {
 	// Hojas de la BD que solo sirven para configurar el proceso. El resto
 	// (tablas como DATOS o BD_LP) se conserva porque las plantillas las usan
 	// mediante fórmulas y nombres definidos.
-	removed := []string{in.Sheets.General, in.Sheets.Configuracion, in.Sheets.P0, in.Sheets.M0}
+	removed := []string{in.Sheets.General, in.Sheets.P0, in.Sheets.M0}
+	if in.Sheets.Configuracion != "" {
+		removed = append(removed, in.Sheets.Configuracion)
+	}
 	var auxiliary []string
 	for _, s := range f.GetSheetList() {
 		if !contains(removed, s) {

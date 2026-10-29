@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -62,6 +63,7 @@ func singleError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, metrado.Report{
 		Errors:   []metrado.Issue{{Level: "error", Message: message}},
 		Warnings: []metrado.Issue{},
+		Checks:   []metrado.Check{},
 	})
 }
 
@@ -100,7 +102,14 @@ func autoriza(w http.ResponseWriter, r *http.Request) (*acceso.Usuario, bool) {
 // (el resto es la planilla).
 const CabeceraTamanoBD = "X-Tamano-Bd"
 
-type archivos struct{ bd, planilla []byte }
+// CabeceraConfiguracion lleva, codificado como URL, el JSON {clave: valor} con
+// los datos de configuración elegidos en la página.
+const CabeceraConfiguracion = "X-Configuracion"
+
+type archivos struct {
+	bd, planilla []byte
+	config       map[string]string
+}
 
 const mensajeMuyGrande = "Los archivos superan los 4 MB permitidos. Quita hojas o filas que no se usen y vuelve a intentarlo."
 
@@ -108,87 +117,108 @@ const mensajeMuyGrande = "Los archivos superan los 4 MB permitidos. Quita hojas 
 //   - binario (application/octet-stream): la BD seguida de la planilla, con el tamaño
 //     de la BD en X-Tamano-Bd. Es el que usa la página: en Vercel un cuerpo multipart
 //     tarda ~3 veces más en llegar a la función (medido: 2,5 s contra 0,75 s).
-//   - multipart/form-data con los campos bd y planilla (curl, pruebas).
+//   - multipart/form-data con los campos bd, planilla y configuracion (curl, pruebas).
 //
-// Si falla devuelve el mensaje para el usuario y el status HTTP.
-func leeArchivos(r *http.Request) (archivos, string, int) {
+// Con requeridos=false basta uno de los dos archivos. Si falla devuelve el
+// mensaje para el usuario y el status HTTP.
+func leeArchivos(r *http.Request, requeridos bool) (archivos, string, int) {
 	esMuyGrande := func(err error) bool {
 		var tooLarge *http.MaxBytesError
 		return errors.As(err, &tooLarge)
 	}
+	var out archivos
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/octet-stream") {
 		n, err := strconv.Atoi(r.Header.Get(CabeceraTamanoBD))
-		if err != nil || n <= 0 {
+		if err != nil || n < 0 {
 			return archivos{}, "Falta el tamaño del archivo BD en el envío.", http.StatusBadRequest
 		}
 		body, err := io.ReadAll(r.Body)
 		if esMuyGrande(err) {
 			return archivos{}, mensajeMuyGrande, http.StatusRequestEntityTooLarge
 		}
-		if err != nil {
+		if err != nil || n > len(body) {
 			return archivos{}, "No se pudieron leer los archivos enviados.", http.StatusBadRequest
 		}
-		if n >= len(body) {
-			return archivos{}, "El archivo Planilla está vacío.", http.StatusBadRequest
+		out.bd, out.planilla = body[:n], body[n:]
+	} else {
+		if err := r.ParseMultipartForm(MaxUploadBytes); err != nil {
+			if esMuyGrande(err) {
+				return archivos{}, mensajeMuyGrande, http.StatusRequestEntityTooLarge
+			}
+			return archivos{}, "No se pudieron leer los archivos enviados.", http.StatusBadRequest
 		}
-		return archivos{bd: body[:n], planilla: body[n:]}, "", 0
+		for _, field := range []struct {
+			name string
+			dest *[]byte
+		}{{"bd", &out.bd}, {"planilla", &out.planilla}} {
+			file, _, err := r.FormFile(field.name)
+			if err != nil {
+				continue
+			}
+			data, err := io.ReadAll(file)
+			file.Close()
+			if err != nil {
+				return archivos{}, "No se pudieron leer los archivos enviados.", http.StatusBadRequest
+			}
+			*field.dest = data
+		}
+	}
+	for _, f := range []struct {
+		label string
+		data  []byte
+	}{{"BD", out.bd}, {"Planilla", out.planilla}} {
+		if requeridos && len(f.data) == 0 {
+			return archivos{}, fmt.Sprintf("Falta el archivo %s.", f.label), http.StatusBadRequest
+		}
+	}
+	if len(out.bd) == 0 && len(out.planilla) == 0 {
+		return archivos{}, "No llegó ningún archivo.", http.StatusBadRequest
 	}
 
-	if err := r.ParseMultipartForm(MaxUploadBytes); err != nil {
-		if esMuyGrande(err) {
-			return archivos{}, mensajeMuyGrande, http.StatusRequestEntityTooLarge
-		}
-		return archivos{}, "No se pudieron leer los archivos enviados.", http.StatusBadRequest
+	raw := r.Header.Get(CabeceraConfiguracion)
+	if raw == "" && r.MultipartForm != nil {
+		raw = r.FormValue("configuracion")
+	} else if raw != "" {
+		raw, _ = url.QueryUnescape(raw)
 	}
-	var out archivos
-	for _, field := range []struct {
-		name, label string
-		dest        *[]byte
-	}{{"bd", "BD", &out.bd}, {"planilla", "Planilla", &out.planilla}} {
-		file, _, err := r.FormFile(field.name)
-		if err != nil {
-			return archivos{}, fmt.Sprintf("Falta el archivo %s.", field.label), http.StatusBadRequest
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &out.config); err != nil {
+			return archivos{}, "La configuración enviada no es válida. Recarga la página.", http.StatusBadRequest
 		}
-		data, err := io.ReadAll(file)
-		file.Close()
-		if err != nil || len(data) == 0 {
-			return archivos{}, fmt.Sprintf("El archivo %s está vacío.", field.label), http.StatusBadRequest
-		}
-		*field.dest = data
 	}
 	return out, "", 0
 }
 
-// load lee los dos archivos del formulario y los analiza. Si devuelve
-// ok=false ya respondió al cliente.
-func load(w http.ResponseWriter, r *http.Request, t *tiempos) (metrado.Report, *metrado.Inputs, *acceso.Usuario, bool) {
+// load lee los archivos del formulario y los analiza. Si devuelve ok=false ya
+// respondió al cliente.
+func load(w http.ResponseWriter, r *http.Request, t *tiempos, requeridos bool) (metrado.Report, *metrado.Inputs, archivos, *acceso.Usuario, bool) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		singleError(w, http.StatusMethodNotAllowed, "Usa POST con los archivos bd y planilla.")
-		return metrado.Report{}, nil, nil, false
+		return metrado.Report{}, nil, archivos{}, nil, false
 	}
 	usuario, ok := autoriza(w, r)
 	if !ok {
-		return metrado.Report{}, nil, nil, false
+		return metrado.Report{}, nil, archivos{}, nil, false
 	}
 	t.marca("acceso")
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadBytes)
-	files, mensaje, status := leeArchivos(r)
+	files, mensaje, status := leeArchivos(r, requeridos)
 	if mensaje != "" {
 		singleError(w, status, mensaje)
-		return metrado.Report{}, nil, nil, false
+		return metrado.Report{}, nil, archivos{}, nil, false
 	}
 	t.marca("lectura")
-	report, inputs := metrado.Analyze(files.bd, files.planilla)
+	report, inputs := metrado.AnalyzeWith(files.bd, files.planilla, metrado.Opciones{Configuracion: files.config})
 	t.marca("validacion")
-	if !report.OK {
+	if len(report.Errors) > 0 {
 		var messages []string
 		for _, e := range report.Errors {
 			messages = append(messages, e.Message)
 		}
 		log.Printf("validación con errores (%s): %q", usuario.Correo, messages)
 	}
-	return report, inputs, usuario, true
+	return report, inputs, files, usuario, true
 }
 
 // Config le dice a la página dónde pedir el token de sesión (la URL de Neon
@@ -221,7 +251,7 @@ func registra(w http.ResponseWriter, accion string, u *acceso.Usuario, t *tiempo
 // Validate responde con el reporte de validación (errores, advertencias y resumen).
 func Validate(w http.ResponseWriter, r *http.Request) {
 	t := nuevosTiempos()
-	report, _, usuario, ok := load(w, r, t)
+	report, _, _, usuario, ok := load(w, r, t, false)
 	if ok {
 		registra(w, "validate", usuario, t, fmt.Sprintf("ok=%v", report.OK))
 		writeJSON(w, http.StatusOK, report)
@@ -231,7 +261,7 @@ func Validate(w http.ResponseWriter, r *http.Request) {
 // Generate devuelve Metrado.xlsx, o el reporte con status 422 si hay errores.
 func Generate(w http.ResponseWriter, r *http.Request) {
 	t := nuevosTiempos()
-	report, inputs, usuario, ok := load(w, r, t)
+	report, inputs, _, usuario, ok := load(w, r, t, true)
 	if !ok {
 		return
 	}
@@ -251,5 +281,40 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 	registra(w, "generate", usuario, t, fmt.Sprintf("filas=%d bytes=%d", report.Summary.Filas, len(content)))
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", `attachment; filename="Metrado.xlsx"`)
+	_, _ = w.Write(content)
+}
+
+// Configurar devuelve la BD con la hoja Configuracion escrita según lo que se
+// eligió en la página, para no tener que elegirlo otra vez.
+func Configurar(w http.ResponseWriter, r *http.Request) {
+	t := nuevosTiempos()
+	report, _, files, usuario, ok := load(w, r, t, false)
+	if !ok {
+		return
+	}
+	if len(files.bd) == 0 {
+		singleError(w, http.StatusBadRequest, "Falta el archivo BD.")
+		return
+	}
+	if len(report.Config) == 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, report)
+		return
+	}
+	for _, c := range report.Config {
+		if c.Valor == "" && c.Clave != "ultimaColumna" {
+			singleError(w, http.StatusUnprocessableEntity, fmt.Sprintf("Falta indicar «%s» antes de descargar la BD.", c.Titulo))
+			return
+		}
+	}
+	content, err := metrado.WriteConfig(files.bd, report.Config)
+	if err != nil {
+		log.Printf("fallo al escribir la configuración: %v", err)
+		singleError(w, http.StatusInternalServerError, "No se pudo escribir la configuración en la BD. Envíanos el archivo para revisarlo.")
+		return
+	}
+	t.marca("escritura")
+	registra(w, "configurar", usuario, t, fmt.Sprintf("bytes=%d", len(content)))
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", `attachment; filename="BD.xlsx"`)
 	_, _ = w.Write(content)
 }
